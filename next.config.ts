@@ -3,22 +3,13 @@ import type { NextConfig } from "next";
 const nextConfig: NextConfig = {
   reactStrictMode: true,
   
-  // Basic config for Appwrite Sites
-  output: 'export',
-  trailingSlash: true,
-  images: {
-    unoptimized: true
-  },
+  // Remove static export - use SSR instead
+  // output: 'export', ← Remove this line
   
-  // Skip pre-rendering problematic pages
-  async exportPathMap() {
-    return {
-      '/': { page: '/' },
-      '/feed': { page: '/feed' },
-      '/profile': { page: '/profile' },
-      '/billing': { page: '/billing' },
-      '/chat': { page: '/chat' }
-    };
+  // Allow dynamic imports and routing
+  images: {
+    domains: ['cloud.appwrite.io'],
+    unoptimized: false
   }
 };
 
