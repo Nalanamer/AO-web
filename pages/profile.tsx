@@ -4,6 +4,8 @@ import { useRouter } from 'next/router';
 import { useAuth } from '../contexts/AuthContext';
 import { databases, DATABASE_ID, USER_PROFILES_COLLECTION_ID, Query } from '../lib/appwrite';
 import MainLayout from '../components/layout/MainLayout';
+import StripeWebTest from '@/components/StripeWebTest';
+
 // Types matching Appwrite schema
 interface UserProfile {
   $id: string;
@@ -406,7 +408,11 @@ const Profile: React.FC = () => {
         <div className="mb-8">
           <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">Profile & Settings</h1>
           <p className="text-gray-600 dark:text-gray-400">Manage your account information and preferences</p>
+          
         </div>
+
+                <StripeWebTest />
+
 
         {/* Basic Profile Info */}
         <ProfileCard title="Profile Information" icon="person-outline">
@@ -669,6 +675,58 @@ const Profile: React.FC = () => {
               <p className="text-2xl font-bold text-emerald-600 dark:text-emerald-400">{profile.activitiesViewed || 0}</p>
               <p className="text-sm text-gray-600 dark:text-gray-400">Activities Viewed</p>
             </div>
+          </div>
+        </ProfileCard>
+
+        {/* ADD THIS NEW SECTION - Billing & Subscription */}
+        <ProfileCard title="Billing & Subscription" icon="card-outline">
+          <div className="space-y-4">
+            {/* Current Plan Display */}
+            <div className="flex items-center justify-between p-4 bg-gray-50 dark:bg-slate-700 rounded-lg">
+              <div>
+                <p className="font-medium text-gray-900 dark:text-white">
+                  Current Plan: {profile.subscriptionTier === 'pro' ? 'Pro Plan' : 
+                               profile.subscriptionTier === 'pro_plus' ? 'Pro+ Plan' : 'Free Plan'}
+                </p>
+                <p className="text-sm text-gray-600 dark:text-gray-400">
+                  {profile.subscriptionTier === 'free' 
+                    ? 'Upgrade to unlock unlimited features' 
+                    : 'Manage your subscription and billing'}
+                </p>
+              </div>
+              <div className={`px-3 py-1 rounded-full text-sm font-medium ${
+                profile.subscriptionTier === 'free' 
+                  ? 'bg-gray-200 text-gray-700 dark:bg-slate-600 dark:text-gray-300'
+                  : 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-200'
+              }`}>
+                {profile.subscriptionTier === 'free' ? 'Free' : 'Premium'}
+              </div>
+            </div>
+
+            {/* Billing Action Button */}
+            <button
+              onClick={() => window.location.href = '/billing'}
+              className="w-full flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white font-medium py-3 px-4 rounded-lg transition-colors"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
+              </svg>
+              {profile.subscriptionTier === 'free' ? 'Upgrade Plan' : 'Manage Billing'}
+            </button>
+
+            {/* Quick Stats for Premium Users */}
+            {profile.subscriptionTier !== 'free' && (
+              <div className="grid grid-cols-2 gap-3 text-sm">
+                <div className="text-center p-2 bg-emerald-50 dark:bg-emerald-900/20 rounded">
+                  <p className="font-medium text-emerald-800 dark:text-emerald-200">Unlimited</p>
+                  <p className="text-emerald-600 dark:text-emerald-400">Events</p>
+                </div>
+                <div className="text-center p-2 bg-emerald-50 dark:bg-emerald-900/20 rounded">
+                  <p className="font-medium text-emerald-800 dark:text-emerald-200">Premium</p>
+                  <p className="text-emerald-600 dark:text-emerald-400">Support</p>
+                </div>
+              </div>
+            )}
           </div>
         </ProfileCard>
 

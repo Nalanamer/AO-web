@@ -24,8 +24,11 @@ const MessageItem: React.FC<MessageItemProps> = ({ message, onRetry }) => {
 
   // Handle image load errors
   const handleImageError = (fileId: string) => {
-    setImageLoadErrors(prev => new Set([...prev, fileId]));
-  };
+setImageLoadErrors(prev => {
+  const newSet = new Set(prev);
+  newSet.add(fileId);
+  return newSet;
+});  };
 
   // Get file type icon
   const getFileIcon = (type: string) => {

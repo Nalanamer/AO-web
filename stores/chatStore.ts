@@ -3,7 +3,7 @@ import { create } from 'zustand';
 import { devtools } from 'zustand/middleware';
 
 // API Configuration
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'https://adventureone-production.up.railway.app';
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'https://ao-production-83fe.up.railway.app';
 
 // 🔧 TOGGLE: Set to true when you implement real backend endpoints
 const USE_REAL_API = true;

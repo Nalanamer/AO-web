@@ -1,8 +1,7 @@
 import axios from 'axios'
 
 // Use your Railway backend URL
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'https://your-railway-app.railway.app'
-
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'https://ao-production-83fe.up.railway.app'
 export const apiClient = axios.create({
   baseURL: API_BASE_URL,
   timeout: 30000,
@@ -67,3 +66,37 @@ export const chatAPI = {
     return response.data
   }
 }
+
+export const stripeAPI = {
+  createCustomer: async (userData: { email: string; userId: string; name: string }) => {
+    console.log('🔄 Creating Stripe customer:', userData.email);
+    const response = await apiClient.post('/create-customer', userData);
+    return response.data;
+  },
+
+  createPortalSession: async (customerId: string, returnUrl?: string) => {
+    console.log('🏢 Creating portal session for customer:', customerId);
+    const response = await apiClient.post('/create-portal-session', {
+      customerId,
+      returnUrl: returnUrl || `${window.location.origin}/billing`
+    });
+    return response.data;
+  },
+
+  createCheckoutSession: async (data: {
+    priceId: string;
+    customerId: string;
+    successUrl: string;
+    cancelUrl: string;
+  }) => {
+    console.log('🛒 Creating checkout session:', data.priceId);
+    const response = await apiClient.post('/create-checkout-session', data);
+    return response.data;
+  },
+
+  getCustomerStatus: async (customerId: string) => {
+    console.log('📋 Getting customer status:', customerId);
+    const response = await apiClient.get(`/customer-status/${customerId}`);
+    return response.data;
+  }
+};

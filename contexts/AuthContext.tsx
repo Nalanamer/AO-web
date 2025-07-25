@@ -3,7 +3,7 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 import { account, databases, DATABASE_ID, USER_PROFILES_COLLECTION_ID, Query } from '../lib/appwrite';
 
 interface User {
-  $id: string;
+   $id: string;
   name?: string;
   email: string;
   location?: {
@@ -18,6 +18,8 @@ interface User {
   createdAt?: string;
   avatar?: string;
   bio?: string;
+  subscriptionTier?: string;    // ← MOVE HERE (top level)
+  subscriptionStatus?: string;  // ← MOVE HERE (top level)
   stats?: {
     activitiesCreated: number;
     eventsHosted: number;
@@ -48,44 +50,69 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [loading, setLoading] = useState(true);
 
   // Get user profile from Appwrite database
-  const getUserProfile = async (userId: string) => {
-    try {
-      if (!USER_PROFILES_COLLECTION_ID) {
-        console.log('⚠️ User profiles collection not configured');
-        return null;
-      }
+  // In your contexts/AuthContext.tsx, find the getUserProfile function and UPDATE it:
 
-      const profiles = await databases.listDocuments(
-        DATABASE_ID,
-        USER_PROFILES_COLLECTION_ID,
-        [Query.equal('userId', userId)]
-      );
+// In your AuthContext, update the getUserProfile function to include stats fields:
 
-      if (profiles.documents.length === 0) {
-        console.log('⚠️ No profile found for user:', userId);
-        return null;
-      }
-
-      const profile = profiles.documents[0] as any;
-      console.log('✅ Profile found for user:', userId);
-
-      return {
-        $id: profile.$id,
-        userId: profile.userId,
-        name: profile.name || '',
-        email: profile.email || '',
-        disciplines: Array.isArray(profile.disciplines) ? profile.disciplines : [],
-        location: profile.location || '',
-        searchRadius: profile.searchRadius ? parseInt(profile.searchRadius) : 50,
-        emailVerification: true,
-        phoneVerification: profile.phoneVerified || false,
-        createdAt: profile.createdAt || new Date().toISOString()
-      };
-    } catch (error) {
-      console.error('❌ Error fetching user profile:', error);
+const getUserProfile = async (userId: string) => {
+  try {
+    if (!USER_PROFILES_COLLECTION_ID) {
+      console.log('⚠️ User profiles collection not configured');
       return null;
     }
-  };
+
+    const profiles = await databases.listDocuments(
+      DATABASE_ID,
+      USER_PROFILES_COLLECTION_ID,
+      [Query.equal('userId', userId)]
+    );
+
+    if (profiles.documents.length === 0) {
+      console.log('⚠️ No profile found for user:', userId);
+      return null;
+    }
+
+    const profile = profiles.documents[0] as any;
+    console.log('✅ Profile found for user:', userId);
+
+    // ✅ ADD DEBUG LOG TO SEE ALL PROFILE FIELDS:
+    console.log('🔍 DEBUG - All profile fields:', Object.keys(profile));
+    console.log('🔍 DEBUG - Stats fields:', {
+      activitiesCreated: profile.activitiesCreated,
+      eventsCreated: profile.eventsCreated,
+      eventsJoined: profile.eventsJoined,
+      activitiesCount: profile.activitiesCount,
+      eventsCount: profile.eventsCount
+    });
+
+    return {
+      $id: profile.$id,
+      userId: profile.userId,
+      name: profile.name || '',
+      email: profile.email || '',
+      disciplines: Array.isArray(profile.disciplines) ? profile.disciplines : [],
+      location: profile.location || '',
+      searchRadius: profile.searchRadius ? parseInt(profile.searchRadius.toString()) : 50,
+      emailVerification: profile.emailVerification || false,
+      phoneVerification: profile.phoneVerification || false,
+      createdAt: profile.createdAt,
+      subscriptionTier: profile.subscriptionTier || 'free',
+      subscriptionStatus: profile.subscriptionStatus || 'active',
+      
+      // ✅ ADD ALL POSSIBLE STATS FIELDS FROM DATABASE:
+      activitiesCreated: profile.activitiesCreated || 0,
+      eventsCreated: profile.eventsCreated || 0,
+      eventsJoined: profile.eventsJoined || 0,
+      activitiesCount: profile.activitiesCount || 0,  // Alternative field name
+      eventsCount: profile.eventsCount || 0,          // Alternative field name
+      commentsCount: profile.commentsCount || 0,
+      activitiesViewed: profile.activitiesViewed || 0
+    };
+  } catch (error) {
+    console.error('❌ Error fetching user profile:', error);
+    return null;
+  }
+};
 
   // Check current session on app load
   useEffect(() => {
@@ -100,20 +127,22 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         
         if (profile) {
           setUser({
-            $id: session.$id,
-            name: profile.name || session.name,
-            email: session.email,
-            location: profile.location || 'Sydney, NSW, Australia',
-            searchRadius: profile.searchRadius || 50,
-            disciplines: profile.disciplines || ['hiking', 'climbing', 'cycling'],
-            emailVerification: session.emailVerification,
-            phoneVerification: profile.phoneVerification || false,
-            createdAt: profile.createdAt,
-            stats: {
-              activitiesCreated: 2,
-              eventsHosted: 1,
-              eventsJoined: 5
-            }
+             $id: session.$id,
+  name: profile.name || session.name,
+  email: session.email,
+  location: profile.location || 'Sydney, NSW, Australia',
+  searchRadius: profile.searchRadius || 50,
+  disciplines: profile.disciplines || ['hiking', 'climbing', 'cycling'],
+  emailVerification: session.emailVerification,
+  phoneVerification: profile.phoneVerification || false,
+  createdAt: profile.createdAt,
+  subscriptionTier: profile.subscriptionTier || 'free',        // ← ADD
+  subscriptionStatus: profile.subscriptionStatus || 'active',  // ← ADD
+  stats: {
+    activitiesCreated: profile.activitiesCreated || 0,    // ✅ Real data
+    eventsHosted: profile.eventsCreated || 0,             // ✅ Real data  
+    eventsJoined: profile.eventsJoined || 0               // ✅ Real data
+  }
           });
         } else {
           // Use basic session data if no profile
@@ -169,11 +198,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           emailVerification: session.emailVerification,
           phoneVerification: profile.phoneVerification || false,
           createdAt: profile.createdAt,
-          stats: {
-            activitiesCreated: 2,
-            eventsHosted: 1,
-            eventsJoined: 5
-          }
+           stats: {
+    activitiesCreated: profile.activitiesCreated || 0,    // ✅ Real data
+    eventsHosted: profile.eventsCreated || 0,             // ✅ Real data
+    eventsJoined: profile.eventsJoined || 0               // ✅ Real data
+  }
         });
       } else {
         // Fallback to session data
