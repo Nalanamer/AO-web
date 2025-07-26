@@ -7,6 +7,7 @@ import MainLayout from '../components/layout/MainLayout';
 import StripeWebTest from '@/components/StripeWebTest';
 import { useFeatureAccess } from '../hooks/useFeatureAccess';
 import { useSubscription } from '../hooks/useSubscription';
+//import { account } from '../lib/appwrite'; // Add this import
 
 
 
@@ -180,7 +181,8 @@ const EditableInfoRow: React.FC<EditableInfoRowProps> = ({ label, value, onEdit 
 
 // Main Profile Component
 const Profile: React.FC = () => {
-  const { user, logout } = useAuth();
+  const { user, logout, sendEmailVerification, refreshUser } = useAuth();
+
   const router = useRouter();
   
   // State
@@ -194,7 +196,11 @@ const Profile: React.FC = () => {
   const [showMedicalEdit, setShowMedicalEdit] = useState(false);
   const [showNotificationEdit, setShowNotificationEdit] = useState(false);
   const [showLocationEdit, setShowLocationEdit] = useState(false);
-  
+  const [verificationLoading, setVerificationLoading] = useState(false);
+const [verificationMessage, setVerificationMessage] = useState('');
+
+
+
   // Temp edit states
   const [tempPhoneNumber, setTempPhoneNumber] = useState('');
   const [tempEmergencyContact, setTempEmergencyContact] = useState({ 
@@ -202,12 +208,14 @@ const Profile: React.FC = () => {
     phone: '', 
     relationship: '' 
   });
-  const [tempMedicalInfo, setTempMedicalInfo] = useState({ 
-    allergies: [] as string[], 
-    conditions: [] as string[], 
-    medications: [] as string[], 
-    notes: '' 
-  });
+  
+
+  const [tempMedicalInfo, setTempMedicalInfo] = useState(() => ({
+  allergies: [] as string[], 
+  conditions: [] as string[], 
+  medications: [] as string[], 
+  notes: '' 
+}));
   const [tempNotificationPrefs, setTempNotificationPrefs] = useState({ 
     email: true, 
     push: true, 
@@ -294,27 +302,64 @@ console.log('🔍 cancelAtPeriodEnd:', subscription?.cancelAtPeriodEnd);
 
   // Parse JSON fields safely
   const parseJSON = (field: any, defaultValue: any) => {
-    if (!field) return defaultValue;
-    if (typeof field === 'object') return field;
-    try {
-      return JSON.parse(field);
-    } catch {
-      return defaultValue;
-    }
-  };
-
-  if (!profile) {
-    const parsedEmergencyContact = { name: '', phone: '', relationship: '' };
-    const parsedMedicalInfo = { allergies: [], conditions: [], medications: [], notes: '' };
-    const parsedNotificationPrefs = { email: true, push: true, sms: false };
-  } else {
-    var parsedEmergencyContact = parseJSON(profile.emergencyContactV2, { name: '', phone: '', relationship: '' });
-    var parsedMedicalInfo = parseJSON(profile.medicalInfo, { allergies: [], conditions: [], medications: [], notes: '' });
-    var parsedNotificationPrefs = parseJSON(profile.notificationPreferences, { email: true, push: true, sms: false });
-    var parsedAvailability = parseJSON(profile.availability, { weekdays: [], preferredTimes: [] });
-    var parsedExperienceLevels = parseJSON(profile.experienceLevels, {});
+  if (!field) return defaultValue;
+  if (typeof field === 'object') return field;
+  try {
+    return JSON.parse(field);
+  } catch {
+    return defaultValue;
   }
+};
 
+// Parse JSON fields safely with enhanced medical info parsing
+const parseMedicalInfoSafely = (medicalData: any) => {
+  const defaultMedical = { allergies: [], conditions: [], medications: [], notes: '' };
+  if (!medicalData) return defaultMedical;
+  
+  let parsed = medicalData;
+  if (typeof medicalData === 'string') {
+    try {
+      parsed = JSON.parse(medicalData);
+    } catch {
+      return defaultMedical;
+    }
+  }
+  
+  // Ensure all array fields are actually arrays
+  return {
+    allergies: Array.isArray(parsed.allergies) ? parsed.allergies : 
+           typeof parsed.allergies === 'string' ? parsed.allergies.split(',').map(item => item.trim()).filter(item => item) : [],
+conditions: Array.isArray(parsed.conditions) ? parsed.conditions : 
+            typeof parsed.conditions === 'string' ? parsed.conditions.split(',').map(item => item.trim()).filter(item => item) : [],
+medications: Array.isArray(parsed.medications) ? parsed.medications : 
+             typeof parsed.medications === 'string' ? parsed.medications.split(',').map(item => item.trim()).filter(item => item) : [],
+    notes: typeof parsed.notes === 'string' ? parsed.notes : ''// Replace the existing parsing section with this:
+
+  };
+};
+
+// Updated parsing section
+// Updated parsing section
+// Parse data safely with defaults
+const parsedEmergencyContact = profile 
+  ? parseJSON(profile.emergencyContactV2, { name: '', phone: '', relationship: '' })
+  : { name: '', phone: '', relationship: '' };
+
+const parsedMedicalInfo = profile 
+  ? parseMedicalInfoSafely(profile.medicalInfo)
+  : { allergies: [], conditions: [], medications: [], notes: '' };
+
+const parsedNotificationPrefs = profile 
+  ? parseJSON(profile.notificationPreferences, { email: true, push: true, sms: false })
+  : { email: true, push: true, sms: false };
+
+const parsedAvailability = profile 
+  ? parseJSON(profile.availability, { weekdays: [], preferredTimes: [] })
+  : { weekdays: [], preferredTimes: [] };
+
+const parsedExperienceLevels = profile 
+  ? parseJSON(profile.experienceLevels, {})
+  : {};
   // Format functions
   const formatPhoneNumber = (phone: string) => {
     if (!phone) return '';
@@ -325,6 +370,11 @@ console.log('🔍 cancelAtPeriodEnd:', subscription?.cancelAtPeriodEnd);
     return phone;
   };
 
+
+  
+
+
+
   const formatAvailability = (availability: any) => {
     if (!availability?.weekdays || availability.weekdays.length === 0) {
       return 'No availability set';
@@ -333,6 +383,23 @@ console.log('🔍 cancelAtPeriodEnd:', subscription?.cancelAtPeriodEnd);
     const times = availability.preferredTimes?.join(', ') || '';
     return times ? `${days} - ${times}` : days;
   };
+
+ const handleSendEmailVerification = async () => {
+  try {
+    setVerificationLoading(true);
+    setVerificationMessage('');
+    
+    await sendEmailVerification();
+    setVerificationMessage('Verification email sent! Please check your inbox.');
+    
+  } catch (error: any) {
+    setVerificationMessage(error.message || 'Failed to send verification email');
+  } finally {
+    setVerificationLoading(false);
+  }
+};
+
+
 
   // Save functions
   const savePhoneNumber = async () => {
@@ -382,6 +449,9 @@ console.log('🔍 cancelAtPeriodEnd:', subscription?.cancelAtPeriodEnd);
 // Add these inside your Profile component, after your existing hooks
 const [monthlyTestResults, setMonthlyTestResults] = useState<string[]>([]);
 const [monthlyTesting, setMonthlyTesting] = useState(false);
+
+
+
 
 const addMonthlyResult = (message: string) => {
   setMonthlyTestResults(prev => [...prev, `${new Date().toLocaleTimeString()}: ${message}`]);
@@ -487,6 +557,7 @@ const testMonthlyReset = async () => {
             value={profile.email || 'Not set'}
             onEdit={() => router.push('/edit-profile')}
           />
+          
           <EditableInfoRow
             label="Date of Birth"
             value={profile.dateOfBirth ? new Date(profile.dateOfBirth).toLocaleDateString() : 'Not set'}
@@ -649,30 +720,54 @@ const testMonthlyReset = async () => {
 
         {/* Medical Information */}
         <ProfileCard title="Medical Information" icon="shield-outline">
-          <EditableInfoRow
-            label="Allergies"
-            value={parsedMedicalInfo.allergies?.length > 0 ? parsedMedicalInfo.allergies.join(', ') : 'None specified'}
-            onEdit={() => {
-              setTempMedicalInfo(parsedMedicalInfo);
-              setShowMedicalEdit(true);
-            }}
-          />
-          <EditableInfoRow
-            label="Medical Conditions"
-            value={parsedMedicalInfo.conditions?.length > 0 ? parsedMedicalInfo.conditions.join(', ') : 'None specified'}
-            onEdit={() => {
-              setTempMedicalInfo(parsedMedicalInfo);
-              setShowMedicalEdit(true);
-            }}
-          />
-          <EditableInfoRow
-            label="Medications"
-            value={parsedMedicalInfo.medications?.length > 0 ? parsedMedicalInfo.medications.join(', ') : 'None specified'}
-            onEdit={() => {
-              setTempMedicalInfo(parsedMedicalInfo);
-              setShowMedicalEdit(true);
-            }}
-          />
+         <EditableInfoRow
+  label="Allergies"
+  value={Array.isArray(parsedMedicalInfo.allergies) && parsedMedicalInfo.allergies.length > 0 
+    ? parsedMedicalInfo.allergies.join(', ') 
+    : 'None specified'}
+  onEdit={() => {
+  const safeMedicalInfo = {
+    allergies: Array.isArray(parsedMedicalInfo.allergies) ? parsedMedicalInfo.allergies : [],
+    conditions: Array.isArray(parsedMedicalInfo.conditions) ? parsedMedicalInfo.conditions : [],
+    medications: Array.isArray(parsedMedicalInfo.medications) ? parsedMedicalInfo.medications : [],
+    notes: parsedMedicalInfo.notes || ''
+  };
+  setTempMedicalInfo(safeMedicalInfo);
+  setShowMedicalEdit(true);
+}}
+/>
+<EditableInfoRow
+  label="Medical Conditions"
+  value={Array.isArray(parsedMedicalInfo.conditions) && parsedMedicalInfo.conditions.length > 0 
+    ? parsedMedicalInfo.conditions.join(', ') 
+    : 'None specified'}
+  onEdit={() => {
+    const safeMedicalInfo = {
+      allergies: Array.isArray(parsedMedicalInfo.allergies) ? parsedMedicalInfo.allergies : [],
+      conditions: Array.isArray(parsedMedicalInfo.conditions) ? parsedMedicalInfo.conditions : [],
+      medications: Array.isArray(parsedMedicalInfo.medications) ? parsedMedicalInfo.medications : [],
+      notes: parsedMedicalInfo.notes || ''
+    };
+    setTempMedicalInfo(safeMedicalInfo);
+    setShowMedicalEdit(true);
+  }}
+/>
+<EditableInfoRow
+  label="Medications"
+  value={Array.isArray(parsedMedicalInfo.medications) && parsedMedicalInfo.medications.length > 0 
+    ? parsedMedicalInfo.medications.join(', ') 
+    : 'None specified'}
+  onEdit={() => {
+    const safeMedicalInfo = {
+      allergies: Array.isArray(parsedMedicalInfo.allergies) ? parsedMedicalInfo.allergies : [],
+      conditions: Array.isArray(parsedMedicalInfo.conditions) ? parsedMedicalInfo.conditions : [],
+      medications: Array.isArray(parsedMedicalInfo.medications) ? parsedMedicalInfo.medications : [],
+      notes: parsedMedicalInfo.notes || ''
+    };
+    setTempMedicalInfo(safeMedicalInfo);
+    setShowMedicalEdit(true);
+  }}
+/>
         </ProfileCard>
 
         {/* Notification Preferences */}
@@ -689,11 +784,11 @@ const testMonthlyReset = async () => {
                   className="sr-only peer"
                   checked={parsedNotificationPrefs.email}
                   onChange={(e) => updateProfile({ 
-                    notificationPreferences: JSON.stringify({
-                      ...parsedNotificationPrefs,
-                      push: e.target.checked
-                    })
-                  })}
+  notificationPreferences: JSON.stringify({
+    ...parsedNotificationPrefs,
+    email: e.target.checked  // ✅ CORRECT
+  })
+})}
                 />
                 <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-emerald-300 dark:peer-focus:ring-emerald-800 rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-emerald-600"></div>
               </label>
@@ -740,7 +835,7 @@ const testMonthlyReset = async () => {
         </ProfileCard>
 
         {/* ADD THIS NEW SECTION - Billing & Subscription */}
-        {/* Enhanced Billing & Subscription with Plan Renewal/Expiration */}
+     
 <ProfileCard title="Billing & Subscription" icon="card-outline">
   <div className="space-y-4">
     {/* Current Plan Display */}
@@ -756,7 +851,7 @@ const testMonthlyReset = async () => {
             : 'Manage your subscription and billing'}
         </p>
         
-        {/* ✅ NEW: Show billing/cancellation dates */}
+        {/* Show billing/cancellation dates */}
         {subscription && subscription.currentPeriodEnd && (
           <div className="mt-2">
             {subscription.cancelAtPeriodEnd ? (
@@ -795,7 +890,19 @@ const testMonthlyReset = async () => {
       </div>
     </div>
 
-    {/* Rest of your existing billing section... */}
+    {/* ✅ ADD THIS: Single Action Button */}
+    <div className="mt-4">
+      <button
+        onClick={() => router.push('/billing')}
+        className="w-full bg-emerald-600 text-white px-4 py-2 rounded-lg hover:bg-emerald-700 transition-colors flex items-center justify-center"
+      >
+        <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+        </svg>
+        {currentPlan === 'free' ? 'Upgrade Plan' : 'Manage Billing'}
+      </button>
+    </div>
   </div>
 </ProfileCard>
 
@@ -890,11 +997,52 @@ const testMonthlyReset = async () => {
               </div>
               
               <div className="mb-4">
-                <p className="text-gray-900 dark:text-white font-medium">Email Verification</p>
-                <p className="text-sm text-gray-600 dark:text-gray-400">
-                   {user?.emailVerification ? '✅ Verified' : '❌ Not verified'}
-                </p>
-              </div>
+  <div className="mb-4">
+  <div className="flex items-center justify-between">
+    <div>
+      <p className="text-gray-900 dark:text-white font-medium">Email Verification</p>
+      <p className="text-sm text-gray-600 dark:text-gray-400">
+        {user?.emailVerification ? '✅ Verified' : '❌ Not verified'}
+      </p>
+      {verificationMessage && (
+        <p className={`text-sm mt-1 ${
+          verificationMessage.includes('sent') || verificationMessage.includes('already sent')
+            ? 'text-emerald-600 dark:text-emerald-400'
+            : 'text-red-600 dark:text-red-400'
+        }`}>
+          {verificationMessage}
+        </p>
+      )}
+    </div>
+    
+    {/* Show verification button only if email is not verified */}
+    {!user?.emailVerification && (
+  <button
+    onClick={handleSendEmailVerification}  // ✅ FIXED: Use the handler function
+    disabled={verificationLoading}
+    className={`px-4 py-2 text-sm rounded-lg transition-colors ${
+      verificationLoading
+        ? 'bg-gray-300 text-gray-500 cursor-not-allowed dark:bg-slate-600 dark:text-slate-400'
+        : 'bg-emerald-600 text-white hover:bg-emerald-700 dark:bg-emerald-700 dark:hover:bg-emerald-600'
+    }`}
+  >
+    {verificationLoading ? (
+      <div className="flex items-center">
+        <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-current" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+        </svg>
+        Sending...
+      </div>
+    ) : (
+      'Verify Email'
+    )}
+  </button>
+)}
+  </div>
+</div>
+
+</div>
 
               <div className="mb-4">
                 <p className="text-gray-900 dark:text-white font-medium">Last Active</p>

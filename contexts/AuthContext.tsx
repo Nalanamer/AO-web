@@ -30,9 +30,12 @@ interface User {
 interface AuthContextType {
   user: User | null;
   login: (email: string, password: string) => Promise<void>;
-  signup: (email: string, password: string, name: string) => Promise<void>; // Add this line
+  signup: (email: string, password: string, name: string) => Promise<void>;
   logout: () => void;
   loading: boolean;
+  // ✅ ADD THESE EMAIL VERIFICATION FUNCTIONS:
+  sendEmailVerification: () => Promise<void>;
+  refreshUser: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -174,62 +177,148 @@ const getUserProfile = async (userId: string) => {
     checkSession();
   }, []);
 
-  const login = async (email: string, password: string) => {
-    setLoading(true);
-    try {
-      console.log('🔐 Attempting login for:', email);
-      
-      // Create session with Appwrite
-      await account.createEmailPasswordSession(email, password);
-      const session = await account.get();
-      console.log('✅ Login successful:', session.email);
+ const login = async (email: string, password: string, isRetry: boolean = false) => {
+  setLoading(true);
+  try {
+    console.log('🔐 Attempting login for:', email);
+    
+    // Create session with Appwrite
+    await account.createEmailPasswordSession(email, password);
+    const session = await account.get();
+    console.log('✅ Login successful:', session.email);
 
-      // Get user profile
-      const profile = await getUserProfile(session.$id);
-      
-      if (profile) {
-        setUser({
-          $id: session.$id,
-          name: profile.name || session.name,
-          email: session.email,
-          location: profile.location || 'Sydney, NSW, Australia',
-          searchRadius: profile.searchRadius || 50,
-          disciplines: profile.disciplines || ['hiking', 'climbing', 'cycling'],
-          emailVerification: session.emailVerification,
-          phoneVerification: profile.phoneVerification || false,
-          createdAt: profile.createdAt,
-           stats: {
-    activitiesCreated: profile.activitiesCreated || 0,    // ✅ Real data
-    eventsHosted: profile.eventsCreated || 0,             // ✅ Real data
-    eventsJoined: profile.eventsJoined || 0               // ✅ Real data
-  }
-        });
-      } else {
-        // Fallback to session data
-        setUser({
-          $id: session.$id,
-          name: session.name,
-          email: session.email,
-          location: 'Sydney, NSW, Australia',
-          searchRadius: 50,
-          disciplines: ['hiking', 'climbing', 'cycling'],
-          emailVerification: session.emailVerification,
-          phoneVerification: false,
-          createdAt: session.registration,
-          stats: {
-            activitiesCreated: 0,
-            eventsHosted: 0,
-            eventsJoined: 0
-          }
-        });
-      }
-    } catch (error) {
-      console.error('❌ Login failed:', error);
-      throw new Error('Invalid email or password. Please try again.');
-    } finally {
-      setLoading(false);
+    // Get user profile (keep your existing profile logic here)
+    const profile = await getUserProfile(session.$id);
+    
+    if (profile) {
+      setUser({
+        $id: session.$id,
+        name: profile.name || session.name,
+        email: session.email,
+        location: profile.location || 'Sydney, NSW, Australia',
+        searchRadius: profile.searchRadius || 50,
+        disciplines: profile.disciplines || ['hiking', 'climbing', 'cycling'],
+        emailVerification: session.emailVerification,
+        phoneVerification: profile.phoneVerification || false,
+        createdAt: profile.createdAt,
+        stats: {
+          activitiesCreated: profile.activitiesCreated || 0,
+          eventsHosted: profile.eventsCreated || 0,
+          eventsJoined: profile.eventsJoined || 0
+        }
+      });
+    } else {
+      // Fallback to session data
+      setUser({
+        $id: session.$id,
+        name: session.name,
+        email: session.email,
+        location: 'Sydney, NSW, Australia',
+        searchRadius: 50,
+        disciplines: ['hiking', 'climbing', 'cycling'],
+        emailVerification: session.emailVerification,
+        phoneVerification: false,
+        createdAt: session.registration,
+        stats: {
+          activitiesCreated: 0,
+          eventsHosted: 0,
+          eventsJoined: 0
+        }
+      });
     }
-  };
+  } catch (error: any) {
+    console.error('❌ Login failed:', error);
+    
+    // Extract error message safely
+    const errorMessage = error?.message || error?.toString() || 'Unknown error';
+    const errorCode = error?.code || error?.type || '';
+    
+    // Handle specific error cases with user-friendly messages
+    
+    // 1. Rate limiting
+    if (errorMessage.includes('Rate limit') || errorMessage.includes('rate limit') || errorCode === 'rate_limit_exceeded') {
+      throw new Error('Too many login attempts. Please wait a few minutes before trying again.');
+    }
+    
+    // 2. Invalid credentials
+    if (errorMessage.includes('Invalid credentials') || 
+        errorMessage.includes('invalid_credentials') ||
+        errorMessage.includes('user with the requested ID could not be found') ||
+        errorMessage.includes('Invalid email or password') ||
+        errorCode === 'user_invalid_credentials') {
+      throw new Error('Invalid email or password. Please check your credentials and try again.');
+    }
+    
+    // 3. Account not found
+    if (errorMessage.includes('user not found') || errorMessage.includes('User not found')) {
+      throw new Error('No account found with this email address. Please check your email or sign up for a new account.');
+    }
+    
+    // 4. Account locked/disabled
+    if (errorMessage.includes('account disabled') || errorMessage.includes('user_disabled')) {
+      throw new Error('Your account has been disabled. Please contact support for assistance.');
+    }
+    
+    // 5. Email not verified (if required)
+    if (errorMessage.includes('email not verified') || errorMessage.includes('user_email_not_verified')) {
+      throw new Error('Please verify your email address before logging in. Check your inbox for a verification link.');
+    }
+    
+    // 6. Session conflict - auto-logout and retry
+    if ((errorMessage.includes('session is active') || 
+         errorMessage.includes('session is prohibited') ||
+         errorMessage.includes('Creation of a session is prohibited')) && !isRetry) {
+      try {
+        console.log('🔄 Session conflict detected - auto-logout and retry...');
+        
+        // Logout existing session
+        await account.deleteSession('current');
+        console.log('✅ Logged out existing session, retrying login...');
+        
+        // Retry login (prevent infinite loop with isRetry flag)
+        return await login(email, password, true);
+        
+      } catch (retryError: any) {
+        console.error('❌ Retry failed:', retryError);
+        throw new Error('You were already logged in with a different account. Please refresh the page and try again.');
+      }
+    }
+    
+    // 7. Network/connection errors
+    if (errorMessage.includes('Failed to fetch') || 
+        errorMessage.includes('Network error') ||
+        errorMessage.includes('ERR_NETWORK') ||
+        errorCode === 'network_error') {
+      throw new Error('Network connection error. Please check your internet connection and try again.');
+    }
+    
+    // 8. Server errors
+    if (errorMessage.includes('Internal server error') || 
+        errorMessage.includes('500') ||
+        errorCode === 'internal_server_error') {
+      throw new Error('Server error. Please try again in a few minutes or contact support if the problem persists.');
+    }
+    
+    // 9. Service unavailable
+    if (errorMessage.includes('Service unavailable') || 
+        errorMessage.includes('503') ||
+        errorCode === 'service_unavailable') {
+      throw new Error('Service is temporarily unavailable. Please try again in a few minutes.');
+    }
+    
+    // 10. Generic fallback with helpful message
+    console.error('🔍 Unhandled login error:', {
+      message: errorMessage,
+      code: errorCode,
+      fullError: error
+    });
+    
+    throw new Error('Login failed. Please check your credentials and try again. If the problem persists, please contact support.');
+    
+  } finally {
+    setLoading(false);
+  }
+};
 
   const signup = async (email: string, password: string, name: string) => {
     setLoading(true);
@@ -297,6 +386,73 @@ const getUserProfile = async (userId: string) => {
     }
   };
 
+
+  const sendEmailVerification = async (): Promise<void> => {
+  if (!user) {
+    throw new Error('No user logged in');
+  }
+
+  try {
+    const redirectUrl = process.env.NODE_ENV === 'production' 
+      ? 'https://your-domain.com/verify-email'
+      : 'http://localhost:3000/verify-email';
+      
+    await account.createVerification(redirectUrl);
+    console.log('✅ Email verification sent');
+    
+  } catch (error: any) {
+    console.error('❌ Failed to send email verification:', error);
+    
+    if (error?.code === 409) {
+      throw new Error('Email verification already sent. Please check your inbox.');
+    } else if (error?.code === 429) {
+      throw new Error('Too many requests. Please wait a moment before trying again.');
+    } else if (error?.code === 400) {
+      throw new Error('Invalid email address. Please check and try again.');
+    } else {
+      throw new Error(`Failed to send verification email: ${error?.message || 'Unknown error'}`);
+    }
+  }
+};
+
+// Add this function to refresh user data after verification
+const refreshUser = async (): Promise<void> => {
+  try {
+    const session = await account.get();
+    
+    // Fetch updated profile
+    const profile = await getUserProfile(session.$id);
+
+    if (profile) {
+      setUser({
+        $id: session.$id,
+        name: profile.name || session.name,
+        email: session.email,
+        emailVerification: session.emailVerification, // This will be updated
+        location: profile.location || 'Sydney, NSW, Australia',
+        searchRadius: profile.searchRadius || 50,
+        disciplines: profile.disciplines || ['hiking', 'climbing', 'cycling'],
+        phoneVerification: profile.phoneVerification || false,
+        createdAt: profile.createdAt,
+        subscriptionTier: profile.subscriptionTier || 'free',
+        subscriptionStatus: profile.subscriptionStatus || 'active',
+        stats: {
+          activitiesCreated: profile.activitiesCreated || 0,
+          eventsHosted: profile.eventsCreated || 0,
+          eventsJoined: profile.eventsJoined || 0
+        }
+      });
+    } else {
+      // Fallback to session data
+      setUser(prev => prev ? {
+        ...prev,
+        emailVerification: session.emailVerification
+      } : null);
+    }
+  } catch (error) {
+    console.error('Failed to refresh user data:', error);
+  }
+};
   const logout = async () => {
     try {
       await account.deleteSession('current');
@@ -309,12 +465,14 @@ const getUserProfile = async (userId: string) => {
   };
 
   const value: AuthContextType = {
-    user,
-    login,
-    logout,
-    loading,
-    signup
-  };
+  user,
+  login,
+  logout,
+  loading,
+  signup,
+    sendEmailVerification,
+  refreshUser
+};
 
   return (
     <AuthContext.Provider value={value}>

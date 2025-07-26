@@ -597,29 +597,30 @@ export default function Register() {
   ];
 
   // Validation
-  const validateCurrentStep = () => {
-    switch (currentStep) {
-      case 1:
-        if (!formData.name || !formData.email || !formData.password || !formData.confirmPassword || !formData.dateOfBirth) {
-          alert('Please fill in all required fields');
-          return false;
-        }
-        if (formData.password !== formData.confirmPassword) {
-          alert('Passwords do not match');
-          return false;
-        }
-        return true;
-      case 2:
-        const disciplines = JSON.parse(formData.disciplines || '[]');
-        if (disciplines.length === 0) {
-          alert('Please select at least one discipline');
-          return false;
-        }
-        return true;
-      default:
-        return true;
-    }
-  };
+ const validateCurrentStep = () => {
+  switch (currentStep) {
+    case 1:
+      if (!formData.name || !formData.email || !formData.password || !formData.confirmPassword || !formData.dateOfBirth) {
+        alert('Please fill in all required fields');
+        return false;
+      }
+      if (formData.password !== formData.confirmPassword) {
+        alert('Passwords do not match');
+        return false;
+      }
+      return true;
+    case 2:
+      // ✅ FIXED: Check preferredActivities instead of disciplines
+      const preferredActivities = JSON.parse(formData.preferredActivities || '[]');
+      if (preferredActivities.length === 0) {
+        alert('Please select at least one preferred activity');
+        return false;
+      }
+      return true;
+    default:
+      return true;
+  }
+};
 
   // Submit registration
   const handleSubmit = async () => {
