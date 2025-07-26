@@ -11,7 +11,10 @@ export const account = new Account(client);
 export const databases = new Databases(client);
 
 // Database and Collection IDs - matching your mobile app exactly
-export const DATABASE_ID = process.env.NEXT_PUBLIC_DATABASE_ID 
+export const DATABASE_ID = process.env.NEXT_PUBLIC_DATABASE_ID!;
+if (!DATABASE_ID) {
+  throw new Error('NEXT_PUBLIC_DATABASE_ID environment variable is required');
+}
 export const ACTIVITIES_COLLECTION_ID = process.env.NEXT_PUBLIC_ACTIVITIES_COLLECTION_ID!;
 export const EVENTS_COLLECTION_ID = process.env.NEXT_PUBLIC_EVENTS_COLLECTION_ID!;
 export const COMMENTS_COLLECTION_ID = process.env.NEXT_PUBLIC_COMMENTS_COLLECTION_ID!;
