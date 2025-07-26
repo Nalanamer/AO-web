@@ -4,10 +4,11 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "build": "next build --no-lint",
     "start": "next start",
     "lint": "next lint",
       "export": "next export"
+      
   },
   "dependencies": {
     "@googlemaps/react-wrapper": "^1.2.0",
