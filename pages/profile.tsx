@@ -315,7 +315,7 @@ console.log('🔍 cancelAtPeriodEnd:', subscription?.cancelAtPeriodEnd);
 const parseMedicalInfoSafely = (medicalData: any) => {
   const defaultMedical = { allergies: [], conditions: [], medications: [], notes: '' };
   if (!medicalData) return defaultMedical;
-  
+
   let parsed = medicalData;
   if (typeof medicalData === 'string') {
     try {
@@ -324,17 +324,33 @@ const parseMedicalInfoSafely = (medicalData: any) => {
       return defaultMedical;
     }
   }
-  
-  // Ensure all array fields are actually arrays
-  return {
-    allergies: Array.isArray(parsed.allergies) ? parsed.allergies : 
-           typeof parsed.allergies === 'string' ? parsed.allergies.split(',').map(item => item.trim()).filter(item => item) : [],
-conditions: Array.isArray(parsed.conditions) ? parsed.conditions : 
-            typeof parsed.conditions === 'string' ? parsed.conditions.split(',').map(item => item.trim()).filter(item => item) : [],
-medications: Array.isArray(parsed.medications) ? parsed.medications : 
-             typeof parsed.medications === 'string' ? parsed.medications.split(',').map(item => item.trim()).filter(item => item) : [],
-    notes: typeof parsed.notes === 'string' ? parsed.notes : ''// Replace the existing parsing section with this:
 
+  return {
+    allergies: Array.isArray(parsed.allergies)
+      ? parsed.allergies
+      : typeof parsed.allergies === 'string'
+        ? parsed.allergies
+            .split(',')
+            .map((item: string) => item.trim())
+            .filter((item: string) => item)
+        : [],
+    conditions: Array.isArray(parsed.conditions)
+      ? parsed.conditions
+      : typeof parsed.conditions === 'string'
+        ? parsed.conditions
+            .split(',')
+            .map((item: string) => item.trim())
+            .filter((item: string) => item)
+        : [],
+    medications: Array.isArray(parsed.medications)
+      ? parsed.medications
+      : typeof parsed.medications === 'string'
+        ? parsed.medications
+            .split(',')
+            .map((item: string) => item.trim())
+            .filter((item: string) => item)
+        : [],
+    notes: typeof parsed.notes === 'string' ? parsed.notes : ''
   };
 };
 
