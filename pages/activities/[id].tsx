@@ -6,6 +6,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { databases, DATABASE_ID, ACTIVITIES_COLLECTION_ID, EVENTS_COLLECTION_ID, COMMENTS_COLLECTION_ID, Query, ID } from '../../lib/appwrite';
 import ActivityDetailMap from '../../components/maps/ActivityDetailMap';
 import { TrashIcon } from '@heroicons/react/24/outline';
+
 // Add community updates collection ID
 const COMMUNITY_UPDATES_COLLECTION_ID = '687b200d001560118a1c';
 
@@ -21,6 +22,7 @@ interface Activity {
   difficulty: 'beginner' | 'intermediate' | 'advanced';
   isPrivate: boolean;
   userId: string;
+  createdBy: string;
   rating: number;
   reviewCount: number;
   eventCount: number;
@@ -126,6 +128,7 @@ const mapDocumentToActivity = (doc: any): Activity => ({
   difficulty: doc.difficulty || 'beginner',
   isPrivate: doc.isPrivate || false,
   userId: doc.userId || '',
+  createdBy: doc.createdBy || doc.userId || '',
   rating: doc.rating || 0,
   reviewCount: doc.reviewCount || 0,
   eventCount: doc.eventCount || 0,
@@ -570,7 +573,7 @@ const isActivityCreator = (): boolean => {
   if (!user || !activity) return false;
   
   // Check both userId and createdBy fields for compatibility
-  return activity.userId === user.$id || 
+  return activity.createdBy === user.$id || 
          (activity as any).createdBy === user.$id;
 };
 
@@ -719,9 +722,13 @@ const handleRegularCommentSubmit = async () => {
               <div className="text-lg font-semibold text-gray-900">
                 {activity.activityname}
               </div>
-              <div className="text-sm text-orange-500">
-                🧗 Your Activity
-              </div>
+              <div className="text-sm">
+  {activity.createdBy === user?.$id ? (
+    <span className="text-orange-500"> Your Activity</span>
+  ) : (
+    <span className="text-gray-500">👥 Community Activity</span>
+  )}
+</div>
             </div>
           </div>
         </div>
@@ -766,8 +773,11 @@ const handleRegularCommentSubmit = async () => {
               {/* Activity Info */}
               <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
                 <h1 className="text-2xl font-bold text-gray-900 mb-2">{activity.activityname}</h1>
-                <p className="text-orange-500 text-sm mb-4">🧗 Your Activity</p>
-                
+{activity.createdBy === user?.$id ? (
+  <p className="text-orange-500 text-sm mb-4"> Your Activity</p>
+) : (
+  <p className="text-gray-500 text-sm mb-4">👥 Community Activity</p>
+)}
                 <div className="space-y-4">
                   <div className="flex items-center gap-3">
                     <icons.MapPin className="h-5 w-5 text-gray-500" />

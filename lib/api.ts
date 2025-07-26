@@ -98,5 +98,55 @@ export const stripeAPI = {
     console.log('📋 Getting customer status:', customerId);
     const response = await apiClient.get(`/customer-status/${customerId}`);
     return response.data;
+  },
+
+  // ADD these functions to your existing stripeAPI object:
+
+// ✅ NEW: Verify checkout completion with webhook validation
+verifyCheckoutCompletion: async (sessionId: string) => {
+  console.log('🔍 Verifying checkout completion:', sessionId);
+  const response = await apiClient.post('/verify-checkout-completion', { sessionId });
+  return response.data;
+},
+
+// ✅ NEW: Get user plan and limits
+getUserPlan: async (userId: string) => {
+  console.log('📊 Getting user plan:', userId);
+  const response = await apiClient.get(`/user-plan/${userId}`);
+  return response.data;
+},
+
+// ✅ NEW: Get user usage data
+getUserUsage: async (userId: string) => {
+  console.log('📈 Getting user usage:', userId);
+  const response = await apiClient.get(`/user-usage/${userId}`);
+  return response.data;
+},
+
+// ✅ NEW: Track usage
+trackUsage: async (data: {
+  userId: string;
+  feature: string;
+  amount?: number;
+  metadata?: any;
+}) => {
+  console.log('📊 Tracking usage:', data.feature);
+  const response = await apiClient.post('/track-usage', data);
+  return response.data;
+}
+};
+
+// Usage tracking API
+export const usageAPI = {
+  trackFeatureUsage: async (userId: string, feature: string, amount: number = 1) => {
+    return await stripeAPI.trackUsage({ userId, feature, amount });
+  },
+
+  getUserUsage: async (userId: string) => {
+    return await stripeAPI.getUserUsage(userId);
+  },
+
+  getUserLimits: async (userId: string) => {
+    return await stripeAPI.getUserPlan(userId);
   }
 };

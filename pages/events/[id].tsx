@@ -5,6 +5,7 @@ import MainLayout from '../../components/layout/MainLayout';
 import { useAuth } from '../../contexts/AuthContext';
 import { databases, DATABASE_ID, EVENTS_COLLECTION_ID, ACTIVITIES_COLLECTION_ID, COMMENTS_COLLECTION_ID, Query, ID } from '../../lib/appwrite';
 import EventDetailMap from '../../components/maps/EventDetailMap';
+import { useFeatureAccess } from '../../hooks/useFeatureAccess';
 
 
 // Mobile App Matching Options
@@ -278,7 +279,8 @@ export default function EventDetail() {
   const router = useRouter();
   const { id: eventId } = router.query;
   const { user } = useAuth();
-  
+  const { canUseFeature, trackFeatureUsage, getUpgradeMessage } = useFeatureAccess();
+
   // State
   const [event, setEvent] = useState<Event | null>(null);
   const [activity, setActivity] = useState<Activity | null>(null);
@@ -404,43 +406,58 @@ export default function EventDetail() {
   };
 
   // Handle join/leave event
-  const handleJoinLeave = async () => {
-    if (!user || !event) return;
+  // Handle join/leave event
+const handleJoinLeave = async () => {
+  if (!user || !event) return;
+  
+  const isParticipant = event.participants.includes(user.$id);
+  
+  // ✅ Check limits BEFORE joining
+  if (!isParticipant && !canUseFeature('eventsJoined')) {
+    alert(getUpgradeMessage('eventsJoined'));
+    return;
+  }
+  
+  setActionLoading(true);
+  try {
+    let updatedParticipants: string[];
     
-    setActionLoading(true);
-    try {
-      const isParticipant = event.participants.includes(user.$id);
-      let updatedParticipants: string[];
-      
-      if (isParticipant) {
-        updatedParticipants = event.participants.filter(id => id !== user.$id);
-      } else {
-        updatedParticipants = [...event.participants, user.$id];
-      }
-      
-      await databases.updateDocument(
-        DATABASE_ID,
-        EVENTS_COLLECTION_ID,
-        event.$id,
-        {
-          participants: updatedParticipants
-        }
-      );
-      
-      // Update local state
-      setEvent(prev => prev ? {
-        ...prev,
-        participants: updatedParticipants
-      } : null);
-      
-      console.log(`✅ ${isParticipant ? 'Left' : 'Joined'} event successfully`);
-    } catch (error) {
-      console.error('❌ Error updating event participation:', error);
-      alert(`Failed to ${event.participants.includes(user.$id) ? 'leave' : 'join'} event. Please try again.`);
-    } finally {
-      setActionLoading(false);
+    if (isParticipant) {
+      updatedParticipants = event.participants.filter(id => id !== user.$id);
+    } else {
+      updatedParticipants = [...event.participants, user.$id];
     }
-  };
+    
+    await databases.updateDocument(
+      DATABASE_ID,
+      EVENTS_COLLECTION_ID,
+      event.$id,
+      {
+        participants: updatedParticipants
+      }
+    );
+    
+    // ✅ Track usage AFTER successful database update
+    if (isParticipant) {
+      await trackFeatureUsage('eventsJoined', -1); // Decrease counter when leaving
+    } else {
+      await trackFeatureUsage('eventsJoined', 1); // Increase counter when joining
+    }
+    
+    // Update local state
+    setEvent(prev => prev ? {
+      ...prev,
+      participants: updatedParticipants
+    } : null);
+    
+    console.log(`✅ ${isParticipant ? 'Left' : 'Joined'} event successfully`);
+  } catch (error) {
+    console.error('❌ Error updating event participation:', error);
+    alert(`Failed to ${isParticipant ? 'leave' : 'join'} event. Please try again.`);
+  } finally {
+    setActionLoading(false);
+  }
+};
 
   // Handle delete event
   const handleDeleteEvent = async () => {

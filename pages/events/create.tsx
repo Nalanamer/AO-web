@@ -6,6 +6,9 @@ import { useAuth } from '../../contexts/AuthContext';
 import { databases, DATABASE_ID, ACTIVITIES_COLLECTION_ID, EVENTS_COLLECTION_ID, ID } from '../../lib/appwrite';
 import { Wrapper } from "@googlemaps/react-wrapper";
 import GoogleMapComponent from '@/components/GoogleMapComponent';
+import { useFeatureAccess } from '@/hooks/useFeatureAccess';
+
+
 
 // Mobile App Matching Options
 const INCLUSIVE_OPTIONS = [
@@ -452,7 +455,8 @@ export default function CreateEvent() {
   const router = useRouter();
   const { activityId } = router.query;
   const { user } = useAuth();
-  
+  const { canUseFeature, trackFeatureUsage, getUpgradeMessage } = useFeatureAccess();
+
   // State
   const [activity, setActivity] = useState<Activity | null>(null);
   const [loading, setLoading] = useState(true);
@@ -578,16 +582,17 @@ export default function CreateEvent() {
   const handleSubmit = async () => {
     if (!validateForm()) return;
 
+    if (!canUseFeature('eventsCreated')) {
+    alert(getUpgradeMessage('eventsCreated'));
+    return;
+  }
+
     try {
        
       setSubmitting(true);
       setErrors({});
 
-      console.log('🔍 EVENT CREATION DEBUG:', {
-        DATABASE_ID,
-        EVENTS_COLLECTION_ID,
-        userDetails: { id: user?.$id, name: user?.name }
-      });
+      
 
       // Prepare event data to match Appwrite Events collection schema
       const eventData = {
@@ -644,7 +649,7 @@ export default function CreateEvent() {
       );
 
       console.log('✅ Event created successfully:', newEvent.$id);
-      
+        await trackFeatureUsage('eventsCreated', 1);
       // Redirect to the new event
       router.push(`/events/${newEvent.$id}`);
       

@@ -7,6 +7,8 @@ import { databases, DATABASE_ID, EVENTS_COLLECTION_ID, ACTIVITIES_COLLECTION_ID,
 import { Wrapper, Status } from "@googlemaps/react-wrapper"; // ADD THIS LINE
 import EventsMap from '../../components/events/EventsMap';
 import EventLocationPicker from '../../components/events/EventLocationPicker';
+import { useFeatureAccess } from '../../hooks/useFeatureAccess';
+
 
 // Mobile App Matching Options
 const INCLUSIVE_OPTIONS = [
@@ -119,6 +121,7 @@ const GoogleMapComponent: React.FC<{
   const [showMap, setShowMap] = useState(true); // Add this line if missing
 
   const [markers, setMarkers] = useState<google.maps.Marker[]>([]);
+
 
   useEffect(() => {
     if (!mapRef.current || !window.google) return;
@@ -575,7 +578,8 @@ const EventCard: React.FC<{
 export default function EventsIndex() {
   const router = useRouter();
   const { user } = useAuth();
-  
+    const { canUseFeature, trackFeatureUsage, getUpgradeMessage } = useFeatureAccess();
+
   // State
   const [allEvents, setAllEvents] = useState<Event[]>([]);
   const [activityTypes, setActivityTypes] = useState<ActivityType[]>(DEFAULT_ACTIVITY_TYPES);
@@ -823,61 +827,72 @@ if (filters.dateRange === 'upcoming') {
 
   // Event actions
   const handleJoinEvent = async (eventId: string) => {
-    if (!user) {
-      router.push('/auth/login');
-      return;
-    }
+  if (!user) {
+    router.push('/auth/login');
+    return;
+  }
 
-    try {
-      const event = allEvents.find(e => e.$id === eventId);
-      if (!event) return;
+  // ✅ ADD: Check feature limits before joining
+  if (!canUseFeature('eventsJoined')) {
+    alert(getUpgradeMessage('eventsJoined'));
+    return;
+  }
 
-      const updatedParticipants = [...event.participants, user.$id];
-      
-      await databases.updateDocument(
-        DATABASE_ID,
-        EVENTS_COLLECTION_ID,
-        eventId,
-        { participants: updatedParticipants }
-      );
+  try {
+    const event = allEvents.find(e => e.$id === eventId);
+    if (!event) return;
 
-      setAllEvents(prevEvents =>
-        prevEvents.map(e =>
-          e.$id === eventId ? { ...e, participants: updatedParticipants } : e
-        )
-      );
-    } catch (error) {
-      console.error('Error joining event:', error);
-      alert('Failed to join event. Please try again.');
-    }
-  };
+    const updatedParticipants = [...event.participants, user.$id];
+    
+    await databases.updateDocument(
+      DATABASE_ID,
+      EVENTS_COLLECTION_ID,
+      eventId,
+      { participants: updatedParticipants }
+    );
 
-  const handleLeaveEvent = async (eventId: string) => {
-    if (!user) return;
+    // ✅ ADD: Track usage after successful join
+    await trackFeatureUsage('eventsJoined');
 
-    try {
-      const event = allEvents.find(e => e.$id === eventId);
-      if (!event) return;
+    setAllEvents(prevEvents =>
+      prevEvents.map(e =>
+        e.$id === eventId ? { ...e, participants: updatedParticipants } : e
+      )
+    );
+  } catch (error) {
+    console.error('Error joining event:', error);
+    alert('Failed to join event. Please try again.');
+  }
+};
+ const handleLeaveEvent = async (eventId: string) => {
+  if (!user) return;
 
-      const updatedParticipants = event.participants.filter(id => id !== user.$id);
-      
-      await databases.updateDocument(
-        DATABASE_ID,
-        EVENTS_COLLECTION_ID,
-        eventId,
-        { participants: updatedParticipants }
-      );
+  try {
+    const event = allEvents.find(e => e.$id === eventId);
+    if (!event) return;
 
-      setAllEvents(prevEvents =>
-        prevEvents.map(e =>
-          e.$id === eventId ? { ...e, participants: updatedParticipants } : e
-        )
-      );
-    } catch (error) {
-      console.error('Error leaving event:', error);
-      alert('Failed to leave event. Please try again.');
-    }
-  };
+    const updatedParticipants = event.participants.filter(id => id !== user.$id);
+    
+    await databases.updateDocument(
+      DATABASE_ID,
+      EVENTS_COLLECTION_ID,
+      eventId,
+      { participants: updatedParticipants }
+    );
+
+    // ✅ ADD: Track usage decrease when leaving event
+    await trackFeatureUsage('eventsJoined', -1);
+
+    setAllEvents(prevEvents =>
+      prevEvents.map(e =>
+        e.$id === eventId ? { ...e, participants: updatedParticipants } : e
+      )
+    );
+  } catch (error) {
+    console.error('Error leaving event:', error);
+    alert('Failed to leave event. Please try again.');
+  }
+};
 
 // Simple fix - just remove the explicit typing and let TypeScript infer:
 
