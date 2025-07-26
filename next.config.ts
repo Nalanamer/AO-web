@@ -5,8 +5,11 @@ const nextConfig: NextConfig = {
   images: {
     unoptimized: true
   },
-  // Force dynamic rendering for all pages to avoid router errors
-  async generateStaticParams() {
+  // Force dynamic rendering by preventing static optimization
+  async redirects() {
+    return [];
+  },
+  async rewrites() {
     return [];
   }
 };
