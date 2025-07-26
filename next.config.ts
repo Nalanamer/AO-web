@@ -5,12 +5,10 @@ const nextConfig: NextConfig = {
   images: {
     unoptimized: true
   },
-  // Force dynamic rendering by preventing static optimization
-  async redirects() {
-    return [];
-  },
-  async rewrites() {
-    return [];
+  // Disable static page generation completely
+  trailingSlash: true,
+  async exportPathMap() {
+    return {};
   }
 };
 
