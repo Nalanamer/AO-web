@@ -622,6 +622,17 @@ const Feed: React.FC = () => {
     }
   }, [user, authLoading]);
 
+  // FOr DEbug
+useEffect(() => {
+  if (user) {
+    
+  }
+}, [user]);
+
+useEffect(() => {
+ 
+}, []);
+
   // Process feed data when dependencies change
   useEffect(() => {
     processFeedData();

@@ -54,11 +54,7 @@ export const useActivities = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   useEffect(() => {
-  console.log('🔍 ACTIVITIES DEBUG:', {
-    databaseId: process.env.NEXT_PUBLIC_DATABASE_ID,
-    collectionId: process.env.NEXT_PUBLIC_ACTIVITIES_COLLECTION_ID,
-    hasUser: !!user
-  });
+  
 }, []);
   const { user } = useAuth();
 
@@ -66,8 +62,6 @@ export const useActivities = () => {
   const fetchActivities = async () => {
   const ACTIVITIES_COLLECTION_ID = process.env.NEXT_PUBLIC_ACTIVITIES_COLLECTION_ID;
   
-  console.log('🔍 FETCH DEBUG: Starting fetchActivities');
-  console.log('Collection ID:', ACTIVITIES_COLLECTION_ID);
   
   setLoading(true);
   setError(null);
@@ -77,11 +71,11 @@ export const useActivities = () => {
     // import { databases, DATABASE_ID, Query } from '../lib/appwrite';
     
     if (!ACTIVITIES_COLLECTION_ID || ACTIVITIES_COLLECTION_ID === 'activities') {
-      console.log('⚠️ No real collection ID, using mock data');
-      setActivities(getMockActivities());
-      setLoading(false);
-      return;
-    }
+  console.log('⚠️ No real collection ID, using mock data');
+  setActivities(getMockActivities());
+  setLoading(false);
+  return;
+}
 
     console.log('📡 Making Appwrite request...');
     
@@ -94,9 +88,7 @@ export const useActivities = () => {
       ]
     );
 
-    console.log(`✅ SUCCESS: Got ${response.documents.length} real activities!`);
-    console.log('First activity:', response.documents[0]?.activityname);
-
+    
     // Map the real data to your format
     const realActivities = response.documents.map((doc: any) => ({
       $id: doc.$id,
@@ -140,7 +132,6 @@ export const useActivities = () => {
     }
 
     try {
-      console.log('🔍 Fetching public activities...');
       
       const response = await databases.listDocuments(
         DATABASE_ID,
@@ -192,7 +183,6 @@ export const useActivities = () => {
     setError(null);
     
     try {
-      console.log('🔍 Searching activities:', query);
       
       const queries = [Query.orderDesc('$createdAt')];
       
@@ -234,7 +224,6 @@ export const useActivities = () => {
       }));
 
       setActivities(searchResults);
-      console.log(`✅ Search returned ${searchResults.length} results`);
       
     } catch (err) {
       console.error('❌ Error searching activities:', err);
@@ -255,7 +244,6 @@ export const useActivities = () => {
     }
 
     try {
-      console.log('📝 Creating activity:', activityData.activityname);
       
       const newActivityData = {
         activityname: activityData.activityname || 'New Activity',

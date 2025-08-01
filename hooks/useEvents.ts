@@ -63,7 +63,7 @@ export const useEvents = () => {
     try {
       setLoading(true);
       setError(null);
-      console.log('📅 Fetching user events...');
+      
 
       // Get events where user is organizer OR participant
       const [organizedEvents, participatingEvents] = await Promise.all([
@@ -120,7 +120,7 @@ export const useEvents = () => {
     try {
       setLoading(true);
       setError(null);
-      console.log('🌍 Fetching public events...');
+      
 
       const response = await databases.listDocuments(
         DATABASE_ID,
@@ -136,7 +136,7 @@ export const useEvents = () => {
         convertAppwriteDocumentToEvent(doc)
       );
 
-      console.log('✅ Public events loaded:', publicEventsList.length);
+      
       setPublicEvents(publicEventsList);
 
     } catch (err) {
@@ -410,7 +410,7 @@ export const useEvents = () => {
     }
 
     try {
-      console.log('🔍 Fetching events for activity:', activityId);
+      
 
       const response = await databases.listDocuments(
         DATABASE_ID,
@@ -425,7 +425,7 @@ export const useEvents = () => {
         convertAppwriteDocumentToEvent(doc)
       );
 
-      console.log('✅ Activity events found:', activityEvents.length);
+      
       return activityEvents;
 
     } catch (err) {
