@@ -411,23 +411,25 @@ export const useActivities = () => {
       );
 
       const activity: Activity = {
-        $id: response.$id,
-        activityname: response.activityname,
-        location: response.location,
-        description: response.description,
-        types: response.types,
-        difficulty: response.difficulty,
-        isPrivate: response.isPrivate,
-        userId: response.userId,
-        createdAt: response.$createdAt,
-        updatedAt: response.$updatedAt,
-        eventCount: response.eventCount,
-        participantCount: response.participantCount,
-        rating: response.rating,
-        reviewCount: response.reviewCount,
-        externalUrls: response.externalUrls,
-        inclusive: response.inclusive
-      };
+  $id: response.$id,
+  activityname: response.activityname,
+  location: response.location,
+  description: response.description,
+  types: response.types,
+  subTypes: response.subTypes, // ✅ ADD THIS
+  typeSpecificData: response.typeSpecificData, // ✅ ADD THIS
+  difficulty: response.difficulty,
+  isPrivate: response.isPrivate,
+  userId: response.userId,
+  createdAt: response.$createdAt,
+  updatedAt: response.$updatedAt,
+  eventCount: response.eventCount,
+  participantCount: response.participantCount,
+  rating: response.rating,
+  reviewCount: response.reviewCount,
+  externalUrls: response.externalUrls,
+  inclusive: response.inclusive
+};
 
       console.log('✅ Activity found:', activity.activityname);
       return activity;

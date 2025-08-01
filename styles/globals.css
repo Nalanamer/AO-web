@@ -91,3 +91,12 @@ svg {
     color-scheme: dark;
   }
 }
+
+
+.comment-delete-btn {
+  transition: all 0.2s ease;
+}
+
+.comment-delete-btn:hover {
+  transform: scale(1.1);
+}

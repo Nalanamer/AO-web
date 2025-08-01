@@ -7,7 +7,7 @@ import { databases, DATABASE_ID, ACTIVITIES_COLLECTION_ID, APP_CONFIG_COLLECTION
 import ActivityLocationPicker from '../../components/activities/ActivityLocationPicker';
 import { Wrapper } from "@googlemaps/react-wrapper";
 import GoogleMapComponent from '../../components/GoogleMapComponent';
-
+import ActivityDataHandler from '@/utils/ActivityDataHandler';
 
 // Interfaces
 interface ActivityType {
@@ -298,7 +298,7 @@ const EnhancedDetailsStep: React.FC<{
                   </h5>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     {subtypeConfig.fields.map(fieldConfig => {
-                      const fieldValue = formData.typeSpecificData[`${fullSubtypeKey}.${fieldConfig.key}`] || '';
+                     const fieldValue = formData.typeSpecificData[fullSubtypeKey]?.[fieldConfig.key] || '';
                       
                       return (
                         <div key={fieldConfig.key}>
@@ -309,11 +309,14 @@ const EnhancedDetailsStep: React.FC<{
                             <select
                               value={fieldValue}
                               onChange={(e) => {
-                                onFormDataChange('typeSpecificData', {
-                                  ...formData.typeSpecificData,
-                                  [`${fullSubtypeKey}.${fieldConfig.key}`]: e.target.value
-                                });
-                              }}
+                                const updatedData = ActivityDataHandler.updateTypeSpecificField(
+                                    formData.typeSpecificData,
+                                    fullSubtypeKey,
+                                    fieldConfig.key,
+                                    e.target.value
+                                );
+                                onFormDataChange('typeSpecificData', updatedData);
+                                }}
                               className="w-full px-3 py-2 bg-white text-gray-900 border border-gray-300 rounded-md focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
                             >
                               <option value="">Select {fieldConfig.label}</option>
@@ -328,11 +331,14 @@ const EnhancedDetailsStep: React.FC<{
                               type={fieldConfig.type}
                               value={fieldValue}
                               onChange={(e) => {
-                                onFormDataChange('typeSpecificData', {
-                                  ...formData.typeSpecificData,
-                                  [`${fullSubtypeKey}.${fieldConfig.key}`]: e.target.value
-                                });
-                              }}
+                                const updatedData = ActivityDataHandler.updateTypeSpecificField(
+                                    formData.typeSpecificData,
+                                    fullSubtypeKey,
+                                    fieldConfig.key,
+                                    e.target.value
+                                );
+                                onFormDataChange('typeSpecificData', updatedData);
+                                }}
                               placeholder={fieldConfig.placeholder}
                               className="w-full px-3 py-2 bg-white text-gray-900 placeholder-gray-500 border border-gray-300 rounded-md focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
                             />
@@ -564,20 +570,39 @@ export default function CreateActivity() {
 
   // Handle form data changes
   const handleFormDataChange = (field: keyof FormData, value: any) => {
-    setFormData(prev => ({
-      ...prev,
-      [field]: value
-    }));
+  setFormData(prev => {
+    const updated = { ...prev, [field]: value };
     
-    // Clear errors
-    setErrors(prev => {
-      if (!prev[field as keyof FormErrors]) return prev;
-      
-      const newErrors = { ...prev };
-      delete newErrors[field as keyof FormErrors];
-      return newErrors;
-    });
-  };
+    // Clean up typeSpecificData when types change
+    if (field === 'types') {
+      // Generate default subtypes for new types
+      const newSubtypes = ActivityDataHandler.generateDefaultSubtypes(value, activityConfigurations);
+      updated.subTypes = newSubtypes;
+      updated.typeSpecificData = ActivityDataHandler.cleanupTypeSpecificData(
+        prev.typeSpecificData,
+        newSubtypes
+      );
+    }
+    
+    // Clean up typeSpecificData when subtypes change
+    if (field === 'subTypes') {
+      updated.typeSpecificData = ActivityDataHandler.cleanupTypeSpecificData(
+        prev.typeSpecificData,
+        value
+      );
+    }
+    
+    return updated;
+  });
+  
+  // Clear errors
+  setErrors(prev => {
+    if (!prev[field as keyof FormErrors]) return prev;
+    const newErrors = { ...prev };
+    delete newErrors[field as keyof FormErrors];
+    return newErrors;
+  });
+};
 
   // URL modal handlers - SIMPLIFIED
   const handleAddUrlFromModal = (urlData: { shortName: string; url: string }) => {
@@ -1074,106 +1099,50 @@ const getUserPreferredLocation = (): LocationData => {
 
   // Handle form submission
   const handleSubmit = async () => {
-    if (!validateCurrentStep()) return;
+  if (!validateCurrentStep()) return;
 
-    try {
-      setSubmitting(true);
+  try {
+    setSubmitting(true);
 
-      // Prepare complete activity data
-      // Prepare complete activity data
-// Prepare complete activity data
-const activityData = {
-  // Basic info
-  activityname: formData.activityname.trim(),
-  
-  // ✅ SIMPLE FIX: Save location as a clean, geocodable string
-  location: formData.location?.address || 
-           `${formData.location?.latitude || -33.8688}, ${formData.location?.longitude || 151.2093}`,
-  
-  description: formData.description.trim(),
-  
-  // ✅ ALWAYS save valid coordinates separately
-  latitude: formData.location?.latitude ? Number(formData.location.latitude) : -33.8688,
-  longitude: formData.location?.longitude ? Number(formData.location.longitude) : 151.2093,
-  
-  // Rest of your fields...
-  type: formData.types[0] || null,
-  types: formData.types,
-  subTypes: formData.subTypes,
-  typeSpecificData: Object.keys(formData.typeSpecificData).length > 0 
-    ? JSON.stringify(formData.typeSpecificData) 
-    : null,
-  isPrivate: formData.isPrivate,
-  externalUrls: formData.externalUrls.length > 0 
-    ? JSON.stringify(formData.externalUrls) 
-    : null,
-  userId: user!.$id,
-  createdBy: user!.$id,
-  createdAt: new Date().toISOString(),
-  updatedAt: new Date().toISOString()
-};
+    // Use ActivityDataHandler to prepare data for saving
+    const preparedData = ActivityDataHandler.prepareForSaving({
+      activityname: formData.activityname.trim(),
+      location: formData.location?.address || 
+               `${formData.location?.latitude || -33.8688}, ${formData.location?.longitude || 151.2093}`,
+      description: formData.description.trim(),
+      latitude: formData.location?.latitude ? Number(formData.location.latitude) : -33.8688,
+      longitude: formData.location?.longitude ? Number(formData.location.longitude) : 151.2093,
+      type: formData.types[0] || null,
+      types: formData.types,
+      subTypes: formData.subTypes,
+      typeSpecificData: formData.typeSpecificData, // This will be serialized by prepareForSaving
+      isPrivate: formData.isPrivate,
+      externalUrls: formData.externalUrls.length > 0 ? JSON.stringify(formData.externalUrls) : null,
+      userId: user!.$id,
+      createdBy: user!.$id,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    });
 
-// ✅ IMPROVED VALIDATION: Ensure location is always geocodable
-if (!activityData.location || activityData.location.includes('Could not find')) {
-  if (activityData.latitude && activityData.longitude) {
-    // Use coordinates as location string
-    activityData.location = `${activityData.latitude}, ${activityData.longitude}`;
-  } else {
-    // Fallback to Sydney CBD
-    activityData.location = 'Sydney CBD, NSW, Australia';
-    activityData.latitude = -33.8688;
-    activityData.longitude = 151.2093;
+    console.log('🚀 Creating activity with prepared data:', preparedData);
+
+    const newActivity = await databases.createDocument(
+      DATABASE_ID,
+      ACTIVITIES_COLLECTION_ID,
+      ID.unique(),
+      preparedData
+    );
+
+    console.log('✅ Activity created successfully:', newActivity.$id);
+    router.push(`/activities/${newActivity.$id}`);
+    
+  } catch (error: any) {
+    console.error('❌ Error creating activity:', error);
+    setErrors({ general: 'Failed to create activity. Please try again.' });
+  } finally {
+    setSubmitting(false);
   }
-}
-
-console.log('🚀 Creating activity with data:', activityData);
-console.log('📍 Final location:', activityData.location);
-console.log('📍 Final coordinates:', { 
-  lat: activityData.latitude, 
-  lng: activityData.longitude 
-});
-
-      // ✅ Validate location data before saving
-if (!activityData.latitude || !activityData.longitude || 
-    isNaN(activityData.latitude) || isNaN(activityData.longitude)) {
-  console.warn('⚠️ Invalid coordinates, using Sydney CBD default');
-  activityData.latitude = -33.8688;
-  activityData.longitude = 151.2093;
-  activityData.location = 'Sydney CBD, NSW, Australia';
-}
-
-console.log('🚀 Creating activity with data:', activityData);
-console.log('📍 Final coordinates:', { 
-  lat: activityData.latitude, 
-  lng: activityData.longitude,
-  type: typeof activityData.latitude 
-});
-
-const newActivity = await databases.createDocument(
-  DATABASE_ID,
-  ACTIVITIES_COLLECTION_ID,
-  ID.unique(),
-  activityData
-);
-
-      console.log('✅ Activity created successfully:', newActivity.$id);
-      router.push(`/activities/${newActivity.$id}`);
-      
-    } catch (error: any) {
-      console.error('❌ Error creating activity:', error);
-      
-      // Enhanced error handling for coordinate validation
-      if (error.message && error.message.includes('latitude')) {
-        setErrors({ general: 'Invalid latitude coordinate. Please check your location coordinates.' });
-      } else if (error.message && error.message.includes('longitude')) {
-        setErrors({ general: 'Invalid longitude coordinate. Please check your location coordinates.' });
-      } else {
-        setErrors({ general: 'Failed to create activity. Please try again.' });
-      }
-    } finally {
-      setSubmitting(false);
-    }
-  };
+};
 
   if (!user) {
     return (

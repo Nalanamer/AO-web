@@ -1,6 +1,6 @@
 // contexts/AuthContext.tsx - Real Appwrite integration
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { account, databases, DATABASE_ID, USER_PROFILES_COLLECTION_ID, Query } from '../lib/appwrite';
+import { account, databases, DATABASE_ID, USER_PROFILES_COLLECTION_ID, Query , ID} from '../lib/appwrite';
 
 interface User {
    $id: string;
@@ -11,6 +11,7 @@ interface User {
     latitude: number;
     longitude: number;
   } | string;
+  locationCoords?: string;
   searchRadius?: number;
   disciplines?: string[];
   emailVerification?: boolean;
@@ -19,7 +20,8 @@ interface User {
   avatar?: string;
   bio?: string;
   subscriptionTier?: string;    // ← MOVE HERE (top level)
-  subscriptionStatus?: string;  // ← MOVE HERE (top level)
+  subscriptionStatus?: string; 
+    profileComplete?: boolean; 
   stats?: {
     activitiesCreated: number;
     eventsHosted: number;
@@ -27,7 +29,7 @@ interface User {
   };
 }
 
-interface AuthContextType {
+/*interface AuthContextType {
   user: User | null;
   login: (email: string, password: string) => Promise<void>;
   signup: (email: string, password: string, name: string) => Promise<void>;
@@ -36,6 +38,26 @@ interface AuthContextType {
   // ✅ ADD THESE EMAIL VERIFICATION FUNCTIONS:
   sendEmailVerification: () => Promise<void>;
   refreshUser: () => Promise<void>;
+}*/
+interface AuthContextType {
+  user: User | null;
+  login: (email: string, password: string) => Promise<void>;
+  signup: (email: string, password: string, name: string) => Promise<void>;
+  logout: () => void;
+  loading: boolean;
+  sendEmailVerification: () => Promise<void>;
+  refreshUser: () => Promise<void>;
+  
+  // ✅ ADD THESE NEW FUNCTIONS:
+  loginWithEmailOTP: (email: string) => Promise<{ requiresEmailOTP: boolean }>;
+verifyEmailOTP: (userId: string, secret: string) => Promise<{ success: boolean; newUser?: boolean }>;
+resendEmailOTP: () => Promise<void>;
+sendPasswordReset: (email: string) => Promise<void>;  resetPassword: (userId: string, secret: string, password: string) => Promise<void>;
+  
+  // ✅ ADD THESE NEW STATE VARIABLES:
+  emailOtpRequired: boolean;
+  otpUserId: string | null;
+  otpEmail: string | null;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -51,6 +73,11 @@ export const useAuth = () => {
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
+
+  const [emailOtpRequired, setEmailOtpRequired] = useState(false);
+  const [otpUserId, setOtpUserId] = useState<string | null>(null);
+  const [otpEmail, setOtpEmail] = useState<string | null>(null);
+
 
   // Get user profile from Appwrite database
   // In your contexts/AuthContext.tsx, find the getUserProfile function and UPDATE it:
@@ -75,18 +102,8 @@ const getUserProfile = async (userId: string) => {
       return null;
     }
 
-    const profile = profiles.documents[0] as any;
-    console.log('✅ Profile found for user:', userId);
-
-    // ✅ ADD DEBUG LOG TO SEE ALL PROFILE FIELDS:
-    console.log('🔍 DEBUG - All profile fields:', Object.keys(profile));
-    console.log('🔍 DEBUG - Stats fields:', {
-      activitiesCreated: profile.activitiesCreated,
-      eventsCreated: profile.eventsCreated,
-      eventsJoined: profile.eventsJoined,
-      activitiesCount: profile.activitiesCount,
-      eventsCount: profile.eventsCount
-    });
+     const profile = profiles.documents[0] as any;
+    
 
     return {
       $id: profile.$id,
@@ -95,13 +112,14 @@ const getUserProfile = async (userId: string) => {
       email: profile.email || '',
       disciplines: Array.isArray(profile.disciplines) ? profile.disciplines : [],
       location: profile.location || '',
+      locationCoords: profile.locationCoords || null,  
       searchRadius: profile.searchRadius ? parseInt(profile.searchRadius.toString()) : 50,
       emailVerification: profile.emailVerification || false,
       phoneVerification: profile.phoneVerification || false,
       createdAt: profile.createdAt,
       subscriptionTier: profile.subscriptionTier || 'free',
       subscriptionStatus: profile.subscriptionStatus || 'active',
-      
+        profileComplete: profile.profileComplete || false,
       // ✅ ADD ALL POSSIBLE STATS FIELDS FROM DATABASE:
       activitiesCreated: profile.activitiesCreated || 0,
       eventsCreated: profile.eventsCreated || 0,
@@ -134,6 +152,7 @@ const getUserProfile = async (userId: string) => {
   name: profile.name || session.name,
   email: session.email,
   location: profile.location || 'Sydney, NSW, Australia',
+   locationCoords: profile.locationCoords, 
   searchRadius: profile.searchRadius || 50,
   disciplines: profile.disciplines || ['hiking', 'climbing', 'cycling'],
   emailVerification: session.emailVerification,
@@ -141,6 +160,7 @@ const getUserProfile = async (userId: string) => {
   createdAt: profile.createdAt,
   subscriptionTier: profile.subscriptionTier || 'free',        // ← ADD
   subscriptionStatus: profile.subscriptionStatus || 'active',  // ← ADD
+  profileComplete: profile.profileComplete || true,
   stats: {
     activitiesCreated: profile.activitiesCreated || 0,    // ✅ Real data
     eventsHosted: profile.eventsCreated || 0,             // ✅ Real data  
@@ -159,6 +179,7 @@ const getUserProfile = async (userId: string) => {
             emailVerification: session.emailVerification,
             phoneVerification: false,
             createdAt: session.registration,
+            profileComplete: false,
             stats: {
               activitiesCreated: 0,
               eventsHosted: 0,
@@ -196,11 +217,13 @@ const getUserProfile = async (userId: string) => {
         name: profile.name || session.name,
         email: session.email,
         location: profile.location || 'Sydney, NSW, Australia',
+        locationCoords: profile.locationCoords,
         searchRadius: profile.searchRadius || 50,
         disciplines: profile.disciplines || ['hiking', 'climbing', 'cycling'],
         emailVerification: session.emailVerification,
         phoneVerification: profile.phoneVerification || false,
         createdAt: profile.createdAt,
+        profileComplete: profile.profileComplete || true,
         stats: {
           activitiesCreated: profile.activitiesCreated || 0,
           eventsHosted: profile.eventsCreated || 0,
@@ -219,6 +242,7 @@ const getUserProfile = async (userId: string) => {
         emailVerification: session.emailVerification,
         phoneVerification: false,
         createdAt: session.registration,
+        profileComplete: false,
         stats: {
           activitiesCreated: 0,
           eventsHosted: 0,
@@ -347,7 +371,8 @@ const getUserProfile = async (userId: string) => {
             location: '',
             searchRadius: '50',
             createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString()
+            updatedAt: new Date().toISOString(),
+            
           };
           
           await databases.createDocument(
@@ -372,6 +397,7 @@ const getUserProfile = async (userId: string) => {
         emailVerification: session.emailVerification,
         phoneVerification: false,
         createdAt: session.registration,
+        profileComplete: true,
         stats: {
           activitiesCreated: 0,
           eventsHosted: 0,
@@ -394,7 +420,7 @@ const getUserProfile = async (userId: string) => {
 
   try {
     const redirectUrl = process.env.NODE_ENV === 'production' 
-      ? 'https://your-domain.com/verify-email'
+      ? 'https://adventureoneapp.com/verify-email'
       : 'http://localhost:3000/verify-email';
       
     await account.createVerification(redirectUrl);
@@ -430,12 +456,14 @@ const refreshUser = async (): Promise<void> => {
         email: session.email,
         emailVerification: session.emailVerification, // This will be updated
         location: profile.location || 'Sydney, NSW, Australia',
+        locationCoords: profile.locationCoords, 
         searchRadius: profile.searchRadius || 50,
         disciplines: profile.disciplines || ['hiking', 'climbing', 'cycling'],
         phoneVerification: profile.phoneVerification || false,
         createdAt: profile.createdAt,
         subscriptionTier: profile.subscriptionTier || 'free',
         subscriptionStatus: profile.subscriptionStatus || 'active',
+        profileComplete: profile.profileComplete || true, 
         stats: {
           activitiesCreated: profile.activitiesCreated || 0,
           eventsHosted: profile.eventsCreated || 0,
@@ -453,6 +481,245 @@ const refreshUser = async (): Promise<void> => {
     console.error('Failed to refresh user data:', error);
   }
 };
+
+
+ // Updated loginWithEmailOTP - Simplified approach (allow account creation)
+const loginWithEmailOTP = async (email: string) => {
+  try {
+    setLoading(true);
+    
+    // Send OTP (Appwrite will handle account creation if needed)
+    const token = await account.createEmailToken(ID.unique(), email);
+    
+    setEmailOtpRequired(true);
+    setOtpUserId(token.userId);
+    setOtpEmail(email);
+    
+    return { requiresEmailOTP: true };
+    
+  } catch (error: any) {
+    if (error.code === 429) {
+      throw new Error('Too many requests. Please wait a moment before trying again.');
+    } else if (error.code === 400) {
+      throw new Error('Invalid email address. Please check and try again.');
+    } else {
+      throw new Error('Failed to send verification email. Please try again.');
+    }
+  } finally {
+    setLoading(false);
+  }
+};
+// Updated verifyEmailOTP - Check if new user and handle accordingly
+const verifyEmailOTP = async (userId: string, secret: string) => {
+  try {
+    setLoading(true);
+    
+    // Input validation
+    if (!userId || !secret) {
+      throw new Error('Missing verification parameters. Please request a new code.');
+    }
+    
+    // Clear any existing session first
+    try {
+      await account.deleteSession('current');
+    } catch (clearError) {
+      // No existing session to clear
+    }
+    
+    // Create session
+    await account.createSession(userId, secret);
+    const authUser = await account.get();
+    const profile = await getUserProfile(authUser.$id);
+    
+    // Handle new user (no profile exists)
+    if (!profile) {
+      // Try to create a basic profile for the new user
+      try {
+        if (USER_PROFILES_COLLECTION_ID) {
+          const profileData = {
+            userId: authUser.$id,
+            name: authUser.name || '',
+            email: authUser.email,
+            disciplines: ['hiking'],
+            provider: 'email',
+            profileComplete: false,
+            isPublicProfile: false,
+            location: '',
+            searchRadius: '50',
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+          };
+          
+          await databases.createDocument(
+            DATABASE_ID,
+            USER_PROFILES_COLLECTION_ID,
+            'unique()',
+            profileData
+          );
+        }
+      } catch (profileCreateError) {
+        // Profile creation failed, but user can still proceed
+      }
+      
+      // Set minimal user data for new account
+      const newUserData = {
+        $id: authUser.$id,
+        name: authUser.name || '',
+        email: authUser.email,
+        location: '',
+        searchRadius: 50,
+        disciplines: [],
+        emailVerification: authUser.emailVerification,
+        phoneVerification: false,
+        createdAt: authUser.registration,
+        subscriptionTier: 'free',
+        subscriptionStatus: 'active',
+        profileComplete: false,
+        stats: {
+          activitiesCreated: 0,
+          eventsHosted: 0,
+          eventsJoined: 0
+        }
+      };
+      
+      setUser(newUserData);
+      
+      // Clear OTP state
+      setEmailOtpRequired(false);
+      setOtpUserId(null);
+      setOtpEmail(null);
+      
+      return { success: true, newUser: true };
+      
+    } else {
+      // Existing user
+      const userData = {
+        $id: authUser.$id,
+        name: profile?.name || authUser.name,
+        email: authUser.email,
+        location: profile?.location || 'Sydney, NSW, Australia',
+        searchRadius: profile?.searchRadius || 50,
+        disciplines: profile?.disciplines || ['hiking', 'climbing', 'cycling'],
+        emailVerification: authUser.emailVerification,
+        phoneVerification: profile?.phoneVerification || false,
+        createdAt: profile?.createdAt,
+        subscriptionTier: profile?.subscriptionTier || 'free',
+        subscriptionStatus: profile?.subscriptionStatus || 'active',
+        profileComplete: profile?.profileComplete || true,
+        stats: {
+          activitiesCreated: profile?.activitiesCreated || 0,
+          eventsHosted: profile?.eventsCreated || 0,
+          eventsJoined: profile?.eventsJoined || 0
+        }
+      };
+      
+      setUser(userData);
+      
+      // Clear OTP state
+      setEmailOtpRequired(false);
+      setOtpUserId(null);
+      setOtpEmail(null);
+      
+      return { success: true, newUser: false };
+    }
+    
+  } catch (error: any) {
+    if (error.code === 401) {
+      if (error.message?.includes('expired')) {
+        throw new Error('Verification code has expired. Please request a new code.');
+      } else if (error.message?.includes('invalid')) {
+        throw new Error('Invalid verification code. Please check your email and enter the correct 6-digit code.');
+      } else {
+        throw new Error('Invalid or expired verification code. Please check your email and try again.');
+      }
+    } else if (error.code === 429) {
+      throw new Error('Too many verification attempts. Please wait 5 minutes before trying again.');
+    } else if (error.code === 400) {
+      throw new Error('Invalid verification code format. Please enter the 6-digit code from your email.');
+    } else if (error.code === 500) {
+      throw new Error('Server error. Please try again in a few moments.');
+    } else if (error.message?.includes('Network')) {
+      throw new Error('Network error. Please check your connection and try again.');
+    } else if (error.message?.includes('Missing verification parameters')) {
+      throw error;
+    } else {
+      throw new Error('Verification failed. Please try again.');
+    }
+  } finally {
+    setLoading(false);
+  }
+};
+
+  // Resend Email OTP
+  const resendEmailOTP = async () => {
+    if (!otpEmail) {
+      throw new Error('No email address available for resend');
+    }
+    
+    try {
+      console.log('🔄 Resending Email OTP to:', otpEmail);
+      await loginWithEmailOTP(otpEmail);
+    } catch (error) {
+      throw error;
+    }
+  };
+
+  // Send Password Reset Email
+  const sendPasswordReset = async (email: string) => {
+    try {
+      setLoading(true);
+      console.log('🔑 Sending password reset email to:', email);
+      
+      // Create password recovery
+      const redirectUrl = process.env.NODE_ENV === 'production' 
+        ? 'https://adventureoneapp.com/auth/reset-password'
+        : 'http://localhost:3000/auth/reset-password';
+        
+      await account.createRecovery(email, redirectUrl);
+      console.log('✅ Password reset email sent');
+      
+    } catch (error: any) {
+      console.error('❌ Failed to send password reset:', error);
+      
+      if (error.code === 429) {
+        throw new Error('Too many requests. Please wait a moment before trying again.');
+      } else if (error.code === 400) {
+        throw new Error('Invalid email address. Please check and try again.');
+      } else if (error.code === 404) {
+        throw new Error('No account found with this email address.');
+      } else {
+        throw new Error('Failed to send password reset email. Please try again.');
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Reset Password with Token
+  const resetPassword = async (userId: string, secret: string, password: string) => {
+    try {
+      setLoading(true);
+      console.log('🔑 Resetting password...');
+      
+      await account.updateRecovery(userId, secret, password);
+      console.log('✅ Password reset successful');
+      
+    } catch (error: any) {
+      console.error('❌ Password reset failed:', error);
+      
+      if (error.code === 401) {
+        throw new Error('Invalid or expired reset link. Please request a new password reset.');
+      } else if (error.code === 400) {
+        throw new Error('Invalid password. Please ensure it meets the requirements.');
+      } else {
+        throw new Error('Failed to reset password. Please try again.');
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+
   const logout = async () => {
     try {
       await account.deleteSession('current');
@@ -464,15 +731,25 @@ const refreshUser = async (): Promise<void> => {
     }
   };
 
-  const value: AuthContextType = {
-  user,
-  login,
-  logout,
-  loading,
-  signup,
+   const value: AuthContextType = {
+    user,
+    login,
+    logout,
+    loading,
+    signup,
     sendEmailVerification,
-  refreshUser
-};
+    refreshUser,
+    
+    // ✅ ADD THESE:
+    loginWithEmailOTP,
+    verifyEmailOTP,
+    resendEmailOTP,
+    sendPasswordReset,
+    resetPassword,
+    emailOtpRequired,
+    otpUserId,
+    otpEmail
+  };
 
   return (
     <AuthContext.Provider value={value}>

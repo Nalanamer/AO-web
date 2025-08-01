@@ -6,6 +6,9 @@ import { useAuth } from '../../contexts/AuthContext';
 import { databases, DATABASE_ID, ACTIVITIES_COLLECTION_ID, EVENTS_COLLECTION_ID, COMMENTS_COLLECTION_ID, Query, ID } from '../../lib/appwrite';
 import ActivityDetailMap from '../../components/maps/ActivityDetailMap';
 import { TrashIcon } from '@heroicons/react/24/outline';
+import { LinkToCommunityButton } from '@/components/LinkToCommunityButton';
+import CommunityService from '../../services/useCommunities';
+import ActivityDataHandler from '../../utils/ActivityDataHandler';
 
 // Add community updates collection ID
 const COMMUNITY_UPDATES_COLLECTION_ID = '687b200d001560118a1c';
@@ -48,6 +51,9 @@ interface Event {
   requirements?: string[];
   equipment?: string[];
   tags?: string[];
+  communityId?: string;        // Add this
+  eventVisibility?: string;    // Add this
+  communityName?: string;      // Add this for display
 }
 
 interface Comment {
@@ -153,7 +159,10 @@ const mapDocumentToEvent = (doc: any): Event => ({
   difficulty: doc.difficulty || '',
   requirements: Array.isArray(doc.requirements) ? doc.requirements : [],
   equipment: Array.isArray(doc.equipment) ? doc.equipment : [],
-  tags: Array.isArray(doc.tags) ? doc.tags : []
+  tags: Array.isArray(doc.tags) ? doc.tags : [],
+  communityId: doc.communityId || undefined,           // Add this
+  eventVisibility: doc.eventVisibility || undefined,   // Add this
+  communityName: doc.communityName || undefined        // Add this
 });
 
 const mapDocumentToComment = (doc: any): Comment => ({
@@ -291,32 +300,60 @@ const [newCommentText, setNewCommentText] = useState(''); // For comments tab
   useEffect(() => {
     if (!id) return;
 
-    const fetchData = async () => {
+   const fetchData = async () => {
+  try {
+    setLoading(true);
+    setError(null);
+
+    // Fetch activity
+    const activityDoc = await databases.getDocument(
+      DATABASE_ID,
+      ACTIVITIES_COLLECTION_ID,
+      id as string
+    );
+    
+    setActivity(mapDocumentToActivity(activityDoc));
+
+    // Fetch related events with community filtering
+    // Fetch related events with community filtering
+const eventsResponse = await databases.listDocuments(
+  DATABASE_ID,
+  EVENTS_COLLECTION_ID,
+  [
+    Query.equal('activityId', id as string),
+    Query.orderDesc('$createdAt'),
+    Query.limit(10)
+  ]
+);
+
+// ✅ FILTER AND MAP IN ONE STEP
+// Enhanced event filtering with community names
+const eventsWithCommunityData = await Promise.all(
+  eventsResponse.documents.map(async (eventDoc: any) => {
+    // Add community name if it's a community event
+    if (eventDoc.communityId) {
       try {
-        setLoading(true);
-        setError(null);
+        const community = await CommunityService.getCommunityById(eventDoc.communityId);
+        eventDoc.communityName = community?.name;
+      } catch (error) {
+        console.log('Could not fetch community name for event');
+      }
+    }
+    return eventDoc;
+  })
+);
 
-        // Fetch activity
-        const activityDoc = await databases.getDocument(
-          DATABASE_ID,
-          ACTIVITIES_COLLECTION_ID,
-          id as string
-        );
-        
-        setActivity(mapDocumentToActivity(activityDoc));
+const publicEvents = eventsWithCommunityData
+  .filter((eventDoc: any) => {
+    if (eventDoc.communityId) {
+      return eventDoc.eventVisibility === 'public';
+    }
+    return true;
+  })
+  .map(mapDocumentToEvent);
 
-        // Fetch related events
-        const eventsResponse = await databases.listDocuments(
-          DATABASE_ID,
-          EVENTS_COLLECTION_ID,
-          [
-            Query.equal('activityId', id as string),
-            Query.orderDesc('$createdAt'),
-            Query.limit(10)
-          ]
-        );
-        
-        setEvents(eventsResponse.documents.map(mapDocumentToEvent));
+setEvents(publicEvents);
+
 
         // Fetch comments
         const commentsResponse = await databases.listDocuments(
@@ -376,13 +413,14 @@ setCommunityUpdates(mappedUpdates);
         
         setComments(rootComments);
 
-      } catch (err) {
-        console.error('Error fetching activity data:', err);
-        setError('Failed to load activity data');
-      } finally {
-        setLoading(false);
-      }
-    };
+          
+  } catch (err) {
+    console.error('Error fetching activity data:', err);
+    setError('Failed to load activity data');
+  } finally {
+    setLoading(false);
+  }
+};
 
     fetchData();
   }, [id]);
@@ -808,57 +846,93 @@ const handleRegularCommentSubmit = async () => {
               </div>
 
 
-                {/* Enhanced Details - Automatic */}
-                {activity?.subTypes?.length && activity.typeSpecificData && (
-                  <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-6">
-                    <div className="flex items-center gap-3 mb-4">
-                      <div className="w-8 h-8 bg-emerald-100 rounded-lg flex items-center justify-center">
-                        <svg className="w-4 h-4 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-                        </svg>
-                      </div>
-                      <h3 className="text-lg font-semibold text-gray-900">Enhanced Details</h3>
-                    </div>
+              
+{/* Enhanced Details */}
+{(() => {
+  const typeSpecificData = ActivityDataHandler.parseTypeSpecificData(activity.typeSpecificData);
+  
+  if (!activity?.subTypes?.length || Object.keys(typeSpecificData).length === 0) {
+    return null;
+  }
+
+  return (
+    <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-6">
+      <div className="flex items-center gap-3 mb-4">
+        <div className="w-8 h-8 bg-emerald-100 rounded-lg flex items-center justify-center">
+          <svg className="w-4 h-4 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+          </svg>
+        </div>
+        <h3 className="text-lg font-semibold text-gray-900">Enhanced Details</h3>
+      </div>
+      
+      <div className="space-y-6">
+        {activity.subTypes.map((subtypeKey: string) => {
+          const subtypeData = typeSpecificData[subtypeKey];
+          
+          if (!subtypeData || Object.keys(subtypeData).length === 0) {
+            return null;
+          }
+          
+          const [activityType, subType] = subtypeKey.split('.');
+          
+          return (
+            <div key={subtypeKey} className="border-l-4 border-emerald-500 pl-4">
+              <div className="text-sm text-emerald-600 font-medium mb-3 capitalize">
+                {activityType} - {subType.replace(/[._-]/g, ' ')}
+              </div>
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                {Object.entries(subtypeData).map(([fieldKey, value]) => {
+                  if (value === null || value === undefined || value === '') {
+                    return null;
+                  }
+                  
+                  // Format field label
+                  const fieldLabel = fieldKey
+                    .replace(/([A-Z])/g, ' $1')
+                    .replace(/^./, str => str.toUpperCase())
+                    .replace(/[._-]/g, ' ')
+                    .trim();
+                  
+                  // Format field value with auto-detected units
+                  const formatValue = (val: any, key: string): string => {
+                    if (val === null || val === undefined) return '-';
                     
-                    {(() => {
-                      const typeSpecificData = parseTypeSpecificData(activity.typeSpecificData);
-                      
-                      return activity.subTypes.map(subTypeKey => {
-                        const [activityType, subType] = subTypeKey.split('.');
-                        const data = typeSpecificData[subTypeKey] || {};
-                        
-                        // Skip if no data
-                        if (!data || Object.keys(data).length === 0) return null;
-                        
-                        return (
-                          <div key={subTypeKey} className="mb-6 last:mb-0">
-                            <div className="text-sm text-emerald-600 font-medium mb-3 capitalize">
-                              {activityType}.{subType}
-                            </div>
-                            
-                            <div className="space-y-1">
-                              {Object.entries(data).map(([fieldKey, value]) => {
-                                if (value === null || value === undefined) return null;
-                                
-                                const { label, suffix } = getFieldDisplayInfo(fieldKey, value);
-                                
-                                return (
-                                  <div key={fieldKey} className="flex justify-between py-2 border-b border-gray-100 last:border-0">
-                                    <span className="text-gray-600">{label}:</span>
-                                    <span className="font-medium text-gray-900">
-                                      {formatAutoValue(value, suffix)}
-                                    </span>
-                                  </div>
-                                );
-                              })}
-                            </div>
-                          </div>
-                        );
-                      });
-                    })()}
-                  </div>
-                )}
-            
+                    if (Array.isArray(val)) return val.join(', ');
+                    
+                    if (typeof val === 'number') {
+                      const lowerKey = key.toLowerCase();
+                      if (lowerKey.includes('distance')) return `${val} km`;
+                      if (lowerKey.includes('elevation') || lowerKey.includes('gain') || lowerKey.includes('approach')) return `${val} m`;
+                      if (lowerKey.includes('depth')) return `${val} m`;
+                      if (lowerKey.includes('temp')) return `${val}°C`;
+                      if (lowerKey.includes('speed') || lowerKey.includes('pace')) return `${val} km/h`;
+                      if (lowerKey.includes('time') || lowerKey.includes('duration')) return `${val} min`;
+                      if (lowerKey.includes('nights')) return `${val} night${val !== 1 ? 's' : ''}`;
+                      if (lowerKey.includes('pitches')) return `${val} pitch${val !== 1 ? 'es' : ''}`;
+                      if (lowerKey.includes('pressure')) return `${val} psi`;
+                      if (lowerKey.includes('wave')) return `${val} ft`;
+                    }
+                    
+                    return String(val);
+                  };
+                  
+                  return (
+                    <div key={fieldKey} className="flex justify-between py-2 border-b border-gray-100 last:border-0">
+                      <span className="text-gray-600 text-sm">{fieldLabel}:</span>
+                      <span className="font-medium text-gray-900 text-sm">{formatValue(value, fieldKey)}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+})()}
 
               {/* Activity Status */}
               <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
@@ -929,26 +1003,26 @@ const handleRegularCommentSubmit = async () => {
   </div>
 </div>
                     
-                    {user && (
-                      <div className="mb-6">
-                        <textarea
-                        value={newComment}
-                        onChange={(e) => setNewComment(e.target.value)}
-                        placeholder="What's happening with this activity? Share tips, conditions, or any helpful info..."
-                        className="w-full p-3 border border-gray-300 rounded-md text-sm"
-                        rows={4}
-                      />
-                        <div className="flex justify-between items-center mt-3">
-                          <span className="text-sm text-gray-500">0/500</span>
-                          <button
-                            onClick={handleCommunityUpdateSubmit}
-                            className="px-4 py-2 bg-gray-800 text-white rounded-md hover:bg-gray-900"
-                          >
-                            Post Update
-                          </button>
-                        </div>
-                      </div>
-                    )}
+                   {user && (
+  <div className="mb-6">
+    <textarea
+      value={newComment}
+      onChange={(e) => setNewComment(e.target.value)}
+      placeholder="What's happening with this activity? Share tips, conditions, or any helpful info..."
+      className="w-full p-3 bg-white border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+      rows={4}
+    />
+    <div className="flex justify-between items-center mt-3">
+      <span className="text-sm text-gray-500">0/500</span>
+      <button
+        onClick={handleCommunityUpdateSubmit}
+        className="px-4 py-2 bg-gray-800 text-white rounded-md hover:bg-gray-900"
+      >
+        Post Update
+      </button>
+    </div>
+  </div>
+)}
 
                     <div className="space-y-4">
                                     {sortCommunityUpdates(communityUpdates, updatesSortBy).map(update => (
@@ -1003,6 +1077,11 @@ const handleRegularCommentSubmit = async () => {
                       Delete Activity
                     </button>
                   )}
+                  <LinkToCommunityButton 
+    activityId={activity.$id}
+    activityName={activity.activityname}
+    currentUserId={user?.$id || ''}
+  />
 
                 </div>
               </div>
@@ -1035,6 +1114,16 @@ const handleRegularCommentSubmit = async () => {
                       <div className="flex justify-between items-start">
                         <div>
                           <h3 className="text-lg font-semibold text-gray-900 mb-2">{event.eventName}</h3>
+
+                            {/* Community Badge for public community events */}
+        {event.communityId && event.eventVisibility === 'public' && (
+          <div className="mb-2">
+            <span className="inline-flex items-center bg-blue-100 text-blue-800 px-2 py-1 rounded-full text-xs">
+              🏘️ From {event.communityName || 'Community'}
+            </span>
+          </div>
+        )}
+                          
                           <div className="space-y-2 text-sm text-gray-600">
                             <div className="flex items-center gap-2">
                               <icons.Calendar className="h-4 w-4" />

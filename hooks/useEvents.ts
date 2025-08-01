@@ -126,6 +126,7 @@ export const useEvents = () => {
         DATABASE_ID,
         EVENTS_COLLECTION_ID,
         [
+          Query.equal('isPublic', true), 
           Query.orderDesc('$createdAt'),
           Query.limit(100) // Adjust limit as needed
         ]
@@ -160,7 +161,9 @@ export const useEvents = () => {
       const newEventData = {
         ...eventData,
         organizerId: user.$id,
-        participants: eventData.participants || [],
+        participants: eventData.participants?.includes(user.$id) 
+    ? eventData.participants 
+    : [user.$id, ...(eventData.participants || [])],
         requirements: eventData.requirements || [],
         equipment: eventData.equipment || [],
         tags: eventData.tags || []
@@ -379,6 +382,7 @@ export const useEvents = () => {
         DATABASE_ID,
         EVENTS_COLLECTION_ID,
         [
+          Query.equal('isPublic', true),
           Query.search('eventName', query),
           Query.orderDesc('$createdAt')
         ]

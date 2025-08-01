@@ -1,4 +1,4 @@
-// lib/appwrite.ts - Web Appwrite configuration
+// lib/appwrite.js - Updated with missing collection
 import { Client, Account, Databases, ID, Query } from 'appwrite';
 
 // Add fallbacks for all environment variables
@@ -22,9 +22,24 @@ export const COMMENTS_COLLECTION_ID = process.env.NEXT_PUBLIC_COMMENTS_COLLECTIO
 export const USER_PROFILES_COLLECTION_ID = process.env.NEXT_PUBLIC_USER_PROFILES_COLLECTION_ID || '684d5264001042b563dd';
 export const APP_CONFIG_COLLECTION_ID = process.env.NEXT_PUBLIC_APP_CONFIG_COLLECTION_ID || '684f5437000a2d76b247';
 
-// ✅ NEW: Add the subscription collections
+// ✅ Community Collections - All Present
 export const USER_SUBSCRIPTIONS_COLLECTION_ID = 'user_subscriptions';
 export const USER_USAGE_COLLECTION_ID = 'user_usage';
+export const COMMUNITIES_COLLECTION_ID = 'communities';
+export const COMMUNITY_MEMBERS_COLLECTION_ID = 'community_members';
+export const COMMUNITY_ACTIVITIES_COLLECTION_ID = 'community_activities';
+export const COMMUNITY_POSTS_COLLECTION_ID = 'community_posts';
+export const COMMUNITY_INVITES_COLLECTION_ID = 'community_invites';
+
+// ✅ ADD THIS - The missing collection
+export const COMMUNITY_JOIN_REQUESTS_COLLECTION_ID = 'community_join_requests';
+
+// ✅ Use existing notifications collection instead of creating new one
+export const COMMUNITY_NOTIFICATIONS_COLLECTION_ID = 'notifications';
+
+//Colletion to manage event invited 
+export const EVENT_INVITES_COLLECTION_ID = process.env.NEXT_PUBLIC_EVENT_INVITES_COLLECTION_ID || 'event_invites';
+
 
 // Export utilities
 export { ID, Query };
@@ -32,5 +47,12 @@ export { ID, Query };
 // Debug logging
 console.log('✅ Appwrite configuration loaded');
 console.log('Database ID:', DATABASE_ID);
-console.log('Subscriptions Collection:', USER_SUBSCRIPTIONS_COLLECTION_ID);
-console.log('Usage Collection:', USER_USAGE_COLLECTION_ID);
+console.log('Communities Collections Ready:', {
+    communities: COMMUNITIES_COLLECTION_ID,
+    members: COMMUNITY_MEMBERS_COLLECTION_ID,
+    activities: COMMUNITY_ACTIVITIES_COLLECTION_ID,
+    posts: COMMUNITY_POSTS_COLLECTION_ID,
+    invites: COMMUNITY_INVITES_COLLECTION_ID,
+    joinRequests: COMMUNITY_JOIN_REQUESTS_COLLECTION_ID,
+    notifications: COMMUNITY_NOTIFICATIONS_COLLECTION_ID
+});

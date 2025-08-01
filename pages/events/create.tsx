@@ -620,8 +620,8 @@ export default function CreateEvent() {
         currentParticipants: 0,
         
         // Arrays
-        participants: [],
-        participantIds: [],
+       participants: [user!.$id],
+participantIds: [user!.$id],
         activityTypes: activity?.types || [],
         inclusive: formData.inclusive,
         
@@ -932,6 +932,102 @@ export default function CreateEvent() {
                 />
               </div>
 
+              {/* Privacy Setting - Enhanced Toggle Slider */}
+<div>
+  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-4">
+    🔒 Event Privacy
+  </label>
+  
+  {/* Enhanced Toggle Container */}
+  <div className={`
+    relative p-5 rounded-xl border-2 transition-all duration-200
+    ${formData.isPublic 
+      ? 'bg-emerald-50 dark:bg-emerald-900/20 border-emerald-200 dark:border-emerald-800' 
+      : 'bg-gray-50 dark:bg-slate-700 border-gray-200 dark:border-slate-600'
+    }
+  `}>
+    <div className="flex items-center justify-between">
+      <div className="flex-1">
+        <div className="flex items-center space-x-3">
+          <span className="text-2xl">
+            {formData.isPublic ? '🌍' : '🔒'}
+          </span>
+          <div>
+            <h4 className={`font-semibold text-lg ${
+              formData.isPublic 
+                ? 'text-emerald-800 dark:text-emerald-200' 
+                : 'text-gray-800 dark:text-white'
+            }`}>
+              {formData.isPublic ? 'Public Event' : 'Private Event'}
+            </h4>
+            <p className={`text-sm mt-1 ${
+              formData.isPublic 
+                ? 'text-emerald-700 dark:text-emerald-300' 
+                : 'text-gray-600 dark:text-gray-400'
+            }`}>
+              {formData.isPublic 
+                ? 'Anyone can discover and join this event' 
+                : 'Only invited people can see and join this event'
+              }
+            </p>
+          </div>
+        </div>
+      </div>
+      
+      {/* Enhanced Toggle Switch */}
+      <button
+        type="button"
+        onClick={() => handleInputChange('isPublic', !formData.isPublic)}
+        className={`
+          relative inline-flex h-10 w-20 items-center rounded-full transition-all duration-300 focus:outline-none focus:ring-4 focus:ring-offset-2 focus:ring-offset-white dark:focus:ring-offset-slate-800 shadow-lg hover:shadow-xl transform hover:scale-105
+          ${formData.isPublic 
+            ? 'bg-emerald-600 hover:bg-emerald-700 focus:ring-emerald-200' 
+            : 'bg-gray-400 dark:bg-slate-500 hover:bg-gray-500 dark:hover:bg-slate-400 focus:ring-gray-200'
+          }
+        `}
+      >
+        <span className="sr-only">Toggle privacy setting</span>
+        <span
+          className={`
+            inline-block h-8 w-8 transform rounded-full bg-white shadow-lg transition-all duration-300 flex items-center justify-center
+            ${formData.isPublic ? 'translate-x-10' : 'translate-x-1'}
+          `}
+        >
+          <span className="text-xs">
+            {formData.isPublic ? '🌍' : '🔒'}
+          </span>
+        </span>
+      </button>
+    </div>
+    
+    {/* Additional Info */}
+    <div className={`mt-4 p-3 rounded-lg text-sm ${
+      formData.isPublic 
+        ? 'bg-emerald-100 dark:bg-emerald-900/40 text-emerald-800 dark:text-emerald-200' 
+        : 'bg-gray-100 dark:bg-slate-600 text-gray-700 dark:text-gray-300'
+    }`}>
+      <strong>
+        {formData.isPublic ? '✅ Public Event Benefits:' : '🔐 Private Event Features:'}
+      </strong>
+      <ul className="mt-1 ml-4 text-xs space-y-1">
+        {formData.isPublic ? (
+          <>
+            <li>• Appears in public event listings</li>
+            <li>• Can be discovered by other users</li>
+            <li>• Anyone can join (up to max participants)</li>
+          </>
+        ) : (
+          <>
+            <li>• Only visible to invited participants</li>
+            <li>• Won't appear in public searches</li>
+            <li>• You control who can join</li>
+          </>
+        )}
+      </ul>
+    </div>
+  </div>
+</div>
+
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                   Max Participants *
@@ -970,27 +1066,7 @@ export default function CreateEvent() {
                 onChange={(difficulty) => handleInputChange('difficulty', difficulty)}
               />
 
-              {/* Privacy Setting */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">
-                  🔒 Privacy Settings
-                </label>
-                <div className="flex items-center space-x-3">
-                  <input
-                    type="checkbox"
-                    id="isPublic"
-                    checked={formData.isPublic}
-                    onChange={(e) => handleInputChange('isPublic', e.target.checked)}
-                    className="rounded border-gray-300 text-emerald-600 focus:ring-emerald-500"
-                  />
-                  <label htmlFor="isPublic" className="text-sm text-gray-700 dark:text-gray-300">
-                    Make this event public (anyone can join)
-                  </label>
-                </div>
-                <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-                  Private events are only visible to people you invite
-                </p>
-              </div>
+             
             </div>
           )}
 

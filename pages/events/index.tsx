@@ -27,8 +27,9 @@ const DIFFICULTY_OPTIONS = [
 
 const EVENT_FILTER_OPTIONS = [
   { id: 'all', label: 'All Events' },
-  { id: 'joined', label: 'My Events Only' },
-  { id: 'hosting', label: 'Events I\'m Hosting' }
+  { id: 'joined', label: 'Events I joined' },
+  { id: 'hosting', label: 'Events I\'m Hosting' },
+  { id: 'private', label: 'My Private Events' } // ✅ ADD THIS
 ];
 
 const DATE_FILTER_OPTIONS = [
@@ -81,6 +82,8 @@ interface Event {
   createdAt: string;
   updatedAt?: string;
   hasLocationData?: boolean;
+   communityId?: string;        // Add this line
+  eventVisibility?: string;
 }
 
 interface ActivityType {
@@ -753,11 +756,33 @@ export default function EventsIndex() {
   const getFilteredEvents = useCallback(() => {
     let filtered = [...allEvents];
 
-    if (filters.eventFilter === 'joined' && user) {
-      filtered = filtered.filter(event => event.participants.includes(user.$id));
-    } else if (filters.eventFilter === 'hosting' && user) {
-      filtered = filtered.filter(event => event.organizerId === user.$id);
+     // FILTER OUT COMMUNITY-ONLY EVENTS FROM PUBLIC VIEW
+  filtered = filtered.filter(event => {
+    // Show only truly public events in main events page
+    if (event.communityId) {
+      // If it's a community event, only show if visibility is 'public'
+      return event.eventVisibility === 'public';
     }
+    // Show non-community events (regular events)
+    return true;
+  });
+
+    if (filters.eventFilter === 'joined' && user) {
+  // ✅ FIXED: Only events where user is participant BUT NOT organizer
+  filtered = filtered.filter(event => 
+    event.participants.includes(user.$id) && event.organizerId !== user.$id
+  );
+} else if (filters.eventFilter === 'hosting' && user) {
+  filtered = filtered.filter(event => event.organizerId === user.$id);
+} else if (filters.eventFilter === 'private' && user) {
+  // ✅ ADD THIS: Show user's private events (both created and invited to)
+  filtered = filtered.filter(event => 
+    !event.isPublic && (
+      event.organizerId === user.$id || 
+      event.participants.includes(user.$id)
+    )
+  );
+}
 
     if (filters.search) {
       const searchLower = filters.search.toLowerCase();
@@ -901,22 +926,69 @@ const fetchAllEvents = async () => {
     setLoading(true);
     setError(null);
 
-    console.log('🔄 Fetching all events from Appwrite...');
+    console.log('🔄 Fetching events from Appwrite...');
     
-    const response = await databases.listDocuments(
+    // ✅ FETCH PUBLIC EVENTS (for general browsing)
+    const publicEventsResponse = await databases.listDocuments(
       DATABASE_ID,
       EVENTS_COLLECTION_ID,
       [
+        Query.equal('isPublic', true),  // ✅ RESTORE: Only public events
         Query.orderDesc('date'),
         Query.limit(500)
       ]
     );
 
-    console.log(`✅ Fetched ${response.documents.length} events`);
-    
-    // ✅ Let TypeScript infer the types - no explicit typing needed
+    let allEventsData = [...publicEventsResponse.documents];
+
+    // ✅ IF USER IS LOGGED IN: Also fetch private events they have access to
+    if (user) {
+      console.log('👤 User logged in, fetching private events...');
+      
+      // Get private events user created
+      const userPrivateEventsResponse = await databases.listDocuments(
+        DATABASE_ID,
+        EVENTS_COLLECTION_ID,
+        [
+          Query.equal('isPublic', false),
+          Query.equal('organizerId', user.$id),
+          Query.limit(100)
+        ]
+      );
+
+      // Get private events user is invited to
+      const userInvitedEventsResponse = await databases.listDocuments(
+        DATABASE_ID,
+        EVENTS_COLLECTION_ID,
+        [
+          Query.equal('isPublic', false),
+          Query.search('participants', user.$id),
+          Query.limit(100)
+        ]
+      );
+
+      // Combine and deduplicate
+      const privateEventsMap = new Map();
+      
+      userPrivateEventsResponse.documents.forEach(doc => {
+        privateEventsMap.set(doc.$id, doc);
+      });
+      
+      userInvitedEventsResponse.documents.forEach(doc => {
+        privateEventsMap.set(doc.$id, doc);
+      });
+
+      // Add private events to the main list
+      allEventsData = [...allEventsData, ...Array.from(privateEventsMap.values())];
+      
+      console.log(`✅ Loaded ${publicEventsResponse.documents.length} public + ${privateEventsMap.size} private events`);
+    } else {
+      console.log(`✅ Loaded ${publicEventsResponse.documents.length} public events (no user)`);
+    }
+
+    // Process all events with metadata
     const eventsWithMetadata = await Promise.all(
-      response.documents.map(async (eventDoc) => {
+      allEventsData.map(async (eventDoc) => {
         const event = {
           $id: eventDoc.$id,
           eventName: eventDoc.eventName || eventDoc.title || 'Unnamed Event',
@@ -939,7 +1011,9 @@ const fetchAllEvents = async () => {
           activityTypes: Array.isArray(eventDoc.activityTypes) ? eventDoc.activityTypes : [],
           createdAt: eventDoc.createdAt || eventDoc.$createdAt || '',
           updatedAt: eventDoc.updatedAt || eventDoc.$updatedAt || '',
-          hasLocationData: Boolean(eventDoc.latitude && eventDoc.longitude)
+          hasLocationData: Boolean(eventDoc.latitude && eventDoc.longitude),
+          communityId: eventDoc.communityId || undefined,
+          eventVisibility: eventDoc.eventVisibility || undefined
         };
 
         // Fetch activity metadata if activityId exists
@@ -950,7 +1024,6 @@ const fetchAllEvents = async () => {
               ACTIVITIES_COLLECTION_ID,
               event.activityId
             );
-            // ✅ Add activityName dynamically
             (event as any).activityName = activityDoc.activityname || activityDoc.name || 'Unknown Activity';
             event.activityTypes = Array.isArray(activityDoc.types) ? activityDoc.types : 
               Array.isArray(activityDoc.activityTypes) ? activityDoc.activityTypes : [];
@@ -974,7 +1047,6 @@ const fetchAllEvents = async () => {
     setLoading(false);
   }
 };
-
 
 
 

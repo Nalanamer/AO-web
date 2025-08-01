@@ -12,8 +12,10 @@ const Navigation = () => {
     { name: 'Feed', href: '/feed', icon: '🏠' },
     { name: 'Activities', href: '/activities', icon: '🗺️' },
     { name: 'Events', href: '/events', icon: '📅' },
-    { name: 'Chat', href: '/chat', icon: '💬' },
-    { name: 'Profile', href: '/profile', icon: '👤' }
+    //{ name: 'Chat', href: '/chat', icon: '💬' },
+     { name: 'Communities', href: '/communities', icon: '👥' },
+    { name: 'Profile', href: '/profile', icon: '👤' },
+   
   ];
 
   const isActiveRoute = (href: string) => {
@@ -28,9 +30,11 @@ const Navigation = () => {
       {/* Logo/Brand */}
       <div className="flex h-16 shrink-0 items-center px-6 border-b border-gray-200 dark:border-slate-700">
         <div className="flex items-center">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-600">
-            <span className="text-sm font-semibold text-white">A1</span>
-          </div>
+          <img 
+  src="/AdventureOne-Logo-nowords.png" 
+  alt="AdventureOne Logo-no words" 
+  className="h-12 w-12 object-contain rounded-lg"
+/>
           <div className="ml-3">
             <p className="text-sm font-semibold text-gray-900 dark:text-white">AdventureOne</p>
           </div>

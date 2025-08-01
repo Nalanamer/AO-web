@@ -57,6 +57,17 @@ const TIME_SLOTS = [
   { id: 'night', label: 'Night (8-11 PM)' }
 ];
 
+
+const validatePassword = (password: string) => {
+  const requirements = {
+    minLength: password.length >= 8,
+    hasUppercase: /[A-Z]/.test(password),
+    hasLowercase: /[a-z]/.test(password),
+    hasNumber: /\d/.test(password),
+  };
+  const isValid = Object.values(requirements).every(Boolean);
+  return { requirements, isValid };
+};
 // =================== MOVED OUTSIDE MAIN COMPONENT ===================
 
 // Progress Indicator Component
@@ -102,85 +113,197 @@ const ProgressIndicator = ({
 );
 
 // Step 1: Account Basics Component
+// Enhanced AccountBasicsStep with password validation
 const AccountBasicsStep = ({ 
   formData, 
   setFormData 
 }: {
   formData: FormData;
   setFormData: (data: FormData) => void;
-}) => (
-  <div className="space-y-6">
-    <h3 className="text-lg font-medium text-gray-900 dark:text-white">
-      Create Your Account
-    </h3>
-    
-    <div className="grid grid-cols-1 gap-6">
-      <div>
-        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
-          Full Name *
-        </label>
-        <input
-          type="text"
-          value={formData.name}
-          onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-          className="mt-1 block w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md shadow-sm bg-white dark:bg-slate-800 text-gray-900 dark:text-white focus:outline-none focus:ring-emerald-500 focus:border-emerald-500"
-          placeholder="Enter your full name"
-        />
-      </div>
+}) => {
+  const [showRequirements, setShowRequirements] = useState(false);
+  const [passwordValidation, setPasswordValidation] = useState({
+    requirements: {
+      minLength: false,
+      hasUppercase: false,
+      hasLowercase: false,
+      hasNumber: false,
+    },
+    isValid: false
+  });
 
-      <div>
-        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
-          Email Address *
-        </label>
-        <input
-          type="email"
-          value={formData.email}
-          onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-          className="mt-1 block w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md shadow-sm bg-white dark:bg-slate-800 text-gray-900 dark:text-white focus:outline-none focus:ring-emerald-500 focus:border-emerald-500"
-          placeholder="Enter your email"
-        />
-      </div>
+  // Password validation function
+  const validatePassword = (password: string) => {
+    const requirements = {
+      minLength: password.length >= 8,
+      hasUppercase: /[A-Z]/.test(password),
+      hasLowercase: /[a-z]/.test(password),
+      hasNumber: /\d/.test(password),
+    };
+    const isValid = Object.values(requirements).every(Boolean);
+    return { requirements, isValid };
+  };
 
-      <div>
-        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
-          Password *
-        </label>
-        <input
-          type="password"
-          value={formData.password}
-          onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-          className="mt-1 block w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md shadow-sm bg-white dark:bg-slate-800 text-gray-900 dark:text-white focus:outline-none focus:ring-emerald-500 focus:border-emerald-500"
-          placeholder="Create a password"
-        />
-      </div>
+  // Update password validation when password changes
+  useEffect(() => {
+    if (formData.password) {
+      setPasswordValidation(validatePassword(formData.password));
+      setShowRequirements(true);
+    } else {
+      setShowRequirements(false);
+    }
+  }, [formData.password]);
 
-      <div>
-        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
-          Confirm Password *
-        </label>
-        <input
-          type="password"
-          value={formData.confirmPassword}
-          onChange={(e) => setFormData({ ...formData, confirmPassword: e.target.value })}
-          className="mt-1 block w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md shadow-sm bg-white dark:bg-slate-800 text-gray-900 dark:text-white focus:outline-none focus:ring-emerald-500 focus:border-emerald-500"
-          placeholder="Confirm your password"
-        />
-      </div>
+  return (
+    <div className="space-y-6">
+      <h3 className="text-lg font-medium text-gray-900 dark:text-white">
+        Create Your Account
+      </h3>
+      
+      <div className="grid grid-cols-1 gap-6">
+        <div>
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+            Full Name *
+          </label>
+          <input
+            type="text"
+            value={formData.name}
+            onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+            className="mt-1 block w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md shadow-sm bg-white dark:bg-slate-800 text-gray-900 dark:text-white focus:outline-none focus:ring-emerald-500 focus:border-emerald-500"
+            placeholder="Enter your full name"
+          />
+        </div>
 
-      <div>
-        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
-          Date of Birth *
-        </label>
-        <input
-          type="date"
-          value={formData.dateOfBirth}
-          onChange={(e) => setFormData({ ...formData, dateOfBirth: e.target.value })}
-          className="mt-1 block w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md shadow-sm bg-white dark:bg-slate-800 text-gray-900 dark:text-white focus:outline-none focus:ring-emerald-500 focus:border-emerald-500"
-        />
+        <div>
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+            Email Address *
+          </label>
+          <input
+            type="email"
+            value={formData.email}
+            onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+            className="mt-1 block w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md shadow-sm bg-white dark:bg-slate-800 text-gray-900 dark:text-white focus:outline-none focus:ring-emerald-500 focus:border-emerald-500"
+            placeholder="Enter your email"
+          />
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+            Password *
+          </label>
+          <input
+            type="password"
+            value={formData.password}
+            onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+            className="mt-1 block w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md shadow-sm bg-white dark:bg-slate-800 text-gray-900 dark:text-white focus:outline-none focus:ring-emerald-500 focus:border-emerald-500"
+            placeholder="Create a password"
+          />
+
+          {/* Password Requirements */}
+          {showRequirements && (
+            <div className="bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-md p-4 mt-2">
+              <h4 className="text-sm font-medium text-gray-900 dark:text-white mb-3">Password Requirements</h4>
+              <ul className="space-y-2">
+                <li className="flex items-center text-sm">
+                  <div className={`w-4 h-4 rounded-full mr-3 flex items-center justify-center ${passwordValidation.requirements.minLength ? 'bg-green-100 dark:bg-green-900' : 'bg-red-100 dark:bg-red-900'}`}>
+                    {passwordValidation.requirements.minLength ? (
+                      <svg className="w-3 h-3 text-green-600 dark:text-green-400" fill="currentColor" viewBox="0 0 20 20">
+                        <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                      </svg>
+                    ) : (
+                      <svg className="w-3 h-3 text-red-600 dark:text-red-400" fill="currentColor" viewBox="0 0 20 20">
+                        <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
+                      </svg>
+                    )}
+                  </div>
+                  <span className={passwordValidation.requirements.minLength ? 'text-green-700 dark:text-green-400' : 'text-red-700 dark:text-red-400'}>
+                    At least 8 characters
+                  </span>
+                </li>
+                <li className="flex items-center text-sm">
+                  <div className={`w-4 h-4 rounded-full mr-3 flex items-center justify-center ${passwordValidation.requirements.hasUppercase ? 'bg-green-100 dark:bg-green-900' : 'bg-red-100 dark:bg-red-900'}`}>
+                    {passwordValidation.requirements.hasUppercase ? (
+                      <svg className="w-3 h-3 text-green-600 dark:text-green-400" fill="currentColor" viewBox="0 0 20 20">
+                        <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                      </svg>
+                    ) : (
+                      <svg className="w-3 h-3 text-red-600 dark:text-red-400" fill="currentColor" viewBox="0 0 20 20">
+                        <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
+                      </svg>
+                    )}
+                  </div>
+                  <span className={passwordValidation.requirements.hasUppercase ? 'text-green-700 dark:text-green-400' : 'text-red-700 dark:text-red-400'}>
+                    One uppercase letter (A-Z)
+                  </span>
+                </li>
+                <li className="flex items-center text-sm">
+                  <div className={`w-4 h-4 rounded-full mr-3 flex items-center justify-center ${passwordValidation.requirements.hasLowercase ? 'bg-green-100 dark:bg-green-900' : 'bg-red-100 dark:bg-red-900'}`}>
+                    {passwordValidation.requirements.hasLowercase ? (
+                      <svg className="w-3 h-3 text-green-600 dark:text-green-400" fill="currentColor" viewBox="0 0 20 20">
+                        <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                      </svg>
+                    ) : (
+                      <svg className="w-3 h-3 text-red-600 dark:text-red-400" fill="currentColor" viewBox="0 0 20 20">
+                        <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
+                      </svg>
+                    )}
+                  </div>
+                  <span className={passwordValidation.requirements.hasLowercase ? 'text-green-700 dark:text-green-400' : 'text-red-700 dark:text-red-400'}>
+                    One lowercase letter (a-z)
+                  </span>
+                </li>
+                <li className="flex items-center text-sm">
+                  <div className={`w-4 h-4 rounded-full mr-3 flex items-center justify-center ${passwordValidation.requirements.hasNumber ? 'bg-green-100 dark:bg-green-900' : 'bg-red-100 dark:bg-red-900'}`}>
+                    {passwordValidation.requirements.hasNumber ? (
+                      <svg className="w-3 h-3 text-green-600 dark:text-green-400" fill="currentColor" viewBox="0 0 20 20">
+                        <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                      </svg>
+                    ) : (
+                      <svg className="w-3 h-3 text-red-600 dark:text-red-400" fill="currentColor" viewBox="0 0 20 20">
+                        <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
+                      </svg>
+                    )}
+                  </div>
+                  <span className={passwordValidation.requirements.hasNumber ? 'text-green-700 dark:text-green-400' : 'text-red-700 dark:text-red-400'}>
+                    One number (0-9)
+                  </span>
+                </li>
+              </ul>
+            </div>
+          )}
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+            Confirm Password *
+          </label>
+          <input
+            type="password"
+            value={formData.confirmPassword}
+            onChange={(e) => setFormData({ ...formData, confirmPassword: e.target.value })}
+            className="mt-1 block w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md shadow-sm bg-white dark:bg-slate-800 text-gray-900 dark:text-white focus:outline-none focus:ring-emerald-500 focus:border-emerald-500"
+            placeholder="Confirm your password"
+          />
+          {formData.confirmPassword && formData.password !== formData.confirmPassword && (
+            <p className="mt-1 text-sm text-red-600 dark:text-red-400">Passwords do not match</p>
+          )}
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+            Date of Birth *
+          </label>
+          <input
+            type="date"
+            value={formData.dateOfBirth}
+            onChange={(e) => setFormData({ ...formData, dateOfBirth: e.target.value })}
+            className="mt-1 block w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md shadow-sm bg-white dark:bg-slate-800 text-gray-900 dark:text-white focus:outline-none focus:ring-emerald-500 focus:border-emerald-500"
+          />
+        </div>
       </div>
     </div>
-  </div>
-);
+  );
+};
 
 // Step 2: Preferences Component (merged Profile Setup + Preferences)
 const PreferencesStep = ({ 
@@ -608,6 +731,11 @@ export default function Register() {
         alert('Passwords do not match');
         return false;
       }
+      const passwordCheck = validatePassword(formData.password);
+if (!passwordCheck.isValid) {
+  alert('Password does not meet the requirements');
+  return false;
+}
       return true;
     case 2:
       // ✅ FIXED: Check preferredActivities instead of disciplines

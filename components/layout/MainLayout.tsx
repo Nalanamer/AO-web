@@ -4,6 +4,7 @@ import { useRouter } from 'next/router';
 import { useAuth } from '../../contexts/AuthContext';
 import Navigation from './Navigation';
 import MobileNavigation from './MobileNavigation';
+import SettingsIcon from './SettingsIcon';
 
 interface MainLayoutProps {
   children: React.ReactNode;

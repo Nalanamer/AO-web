@@ -83,6 +83,19 @@ const getActivityCoordinates = () => {
 
   // Load Google Maps script
   useEffect(() => {
+
+ {/*DEbug code start  
+console.log('🔍 Environment Debug:');
+  console.log('- NODE_ENV:', process.env.NODE_ENV);
+  console.log('- All NEXT_PUBLIC vars:', Object.keys(process.env).filter(key => key.startsWith('NEXT_PUBLIC_')));
+  console.log('- API Key present:', !!process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY);
+  console.log('- API Key value:', process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY ? 'EXISTS' : 'MISSING');
+  console.log('- typeof API Key:', typeof process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY);
+  console.log('🧪 Test var:', process.env.NEXT_PUBLIC_TEST_VAR);
+
+
+  DEbug code start  */}
+
     // Check if Google Maps is already loaded
     if (typeof window !== 'undefined' && window.google && window.google.maps) {
       setIsLoaded(true);
@@ -92,9 +105,13 @@ const getActivityCoordinates = () => {
     // Check if API key exists
     const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
     if (!apiKey) {
-      setError('Google Maps API key not configured');
-      return;
+     console.error('❌ No API key found');
+    setError('Google Maps API key not configured');
+    return;
     }
+
+      console.log('✅ API key found, loading script...');
+
 
     const script = document.createElement('script');
     script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=geometry`;

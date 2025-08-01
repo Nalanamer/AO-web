@@ -3,17 +3,43 @@ import React, { useEffect } from 'react';
 import { useRouter } from 'next/router';
 import { useAuth } from '@/contexts/AuthContext';
 import Head from 'next/head';
+import { useState } from 'react';
 
 export default function LandingPage() {
+   const [mounted, setMounted] = useState(false); 
   const router = useRouter();
   const { user, loading } = useAuth();
 
+// In your pages/index.tsx, add this to the useEffect:
+useEffect(() => {
+  console.log('🔍 INDEX PAGE - mounted:', mounted, 'loading:', loading, 'pathname:', router.pathname, 'user:', !!user);
+  
+  // Only redirect if we're exactly on the root path
+  if (mounted && !loading && router.pathname === '/') {
+    console.log('🚀 INDEX PAGE - Attempting redirect from root');
+    const timer = setTimeout(() => {
+      if (user) {
+        console.log('🚀 INDEX PAGE - Redirecting authenticated user to feed');
+        router.replace('/feed');
+      } else {
+        console.log('🚀 INDEX PAGE - Redirecting unauthenticated user to login');
+        router.replace('/auth/login');
+      }
+    }, 200);
+
+    return () => clearTimeout(timer);
+  }
+}, [user, loading, router, mounted]);
+
+
+
+
   // If user is already authenticated, redirect to feed
-  useEffect(() => {
+  /*useEffect(() => {
     if (!loading && user) {
       router.replace('/feed');
     }
-  }, [user, loading, router]);
+  }, [user, loading, router]);*/
 
   const redirectToLogin = () => {
     router.push('/auth/login');
@@ -70,7 +96,7 @@ export default function LandingPage() {
           <div className="hero-content">
             <h1 className="floating">Hey, Let's Go on an Adventure!</h1>
             <p>Tired of scrolling through your phone wondering what to do this weekend? AdventureOne is where you'll find your next hiking buddy, discover that hidden surf spot, or finally try rock climbing with people who actually know what they're doing. No more boring weekends!</p>
-            <button className="cta-button" onClick={redirectToLogin}>Let's Do This!</button>
+            <button className="cta-button" onClick={redirectToLogin}>Enter AdventureOne here!</button>
           </div>
         </section>
 

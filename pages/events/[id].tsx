@@ -1,12 +1,15 @@
 // pages/events/[id].tsx - Event Detail Page (Mobile App Structure)
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect ,useCallback } from 'react';
 import { useRouter } from 'next/router';
 import MainLayout from '../../components/layout/MainLayout';
 import { useAuth } from '../../contexts/AuthContext';
-import { databases, DATABASE_ID, EVENTS_COLLECTION_ID, ACTIVITIES_COLLECTION_ID, COMMENTS_COLLECTION_ID, Query, ID } from '../../lib/appwrite';
+import { databases, DATABASE_ID, EVENTS_COLLECTION_ID, ACTIVITIES_COLLECTION_ID, COMMENTS_COLLECTION_ID,EVENT_INVITES_COLLECTION_ID, Query, ID } from '../../lib/appwrite';
 import EventDetailMap from '../../components/maps/EventDetailMap';
 import { useFeatureAccess } from '../../hooks/useFeatureAccess';
-
+import CommunityService from '@/services/useCommunities';
+import { useUserProfiles, getDisplayName } from '../../hooks/useUserProfiles';
+import EventInviteService from '../../services/EventInviteService';
+import InviteUsersModal from '@/components/events/InviteUsersModal';
 
 // Mobile App Matching Options
 const INCLUSIVE_OPTIONS = [
@@ -46,6 +49,9 @@ interface Event {
   longitude?: number;
   createdAt: string;
   updatedAt?: string;
+  communityId?: string;        // Add this line
+  communityName?: string;
+  invitedUsers?: string[];
 }
 
 interface Activity {
@@ -148,6 +154,8 @@ const calculateDuration = (startDate: string, startTime: string, endDate?: strin
     return null;
   }
 };
+
+
 
 // Map Component
 const EventLocationMap: React.FC<{
@@ -278,7 +286,7 @@ const CommentsSection: React.FC<{
 export default function EventDetail() {
   const router = useRouter();
   const { id: eventId } = router.query;
-  const { user } = useAuth();
+  const { user, loading: authLoading } = useAuth();
   const { canUseFeature, trackFeatureUsage, getUpgradeMessage } = useFeatureAccess();
 
   // State
@@ -288,35 +296,50 @@ export default function EventDetail() {
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
   const [activeTab, setActiveTab] = useState<'details' | 'comments'>('details');
+  const { profiles: participantProfiles, loading: profilesLoading } = useUserProfiles(event?.participants || []);
+  const [showInviteModal, setShowInviteModal] = useState(false);
+
+  useEffect(() => {
+  console.log('🔍 AUTH STATE DEBUG:', {
+    authLoading,
+    componentLoading: loading,
+    hasUser: !!user,
+    userId: user?.$id,
+    userEmail: user?.email
+  });
+}, [authLoading, user]);
+
+
 
   // Helper function to safely convert Appwrite document
   const mapDocumentToEvent = (doc: any): Event => {
-    return {
-      $id: doc.$id,
-      eventName: doc.eventName || doc.title || '',
-      title: doc.title || doc.eventName || '',
-      activityId: doc.activityId || '',
-      activityName: doc.activityName || '',
-      date: doc.date || '',
-      meetupTime: doc.meetupTime || '',
-      meetupPoint: doc.meetupPoint || '',
-      location: doc.location || '',
-      description: doc.description || '',
-      maxParticipants: doc.maxParticipants || 10,
-      participants: Array.isArray(doc.participants) ? doc.participants : [],
-      organizerId: doc.organizerId || doc.createdBy || '',
-      difficulty: doc.difficulty || '',
-      inclusive: Array.isArray(doc.inclusive) ? doc.inclusive : [],
-      isPublic: doc.isPublic !== false,
-      endDate: doc.endDate,
-      endTime: doc.endTime,
-      latitude: doc.latitude,
-      longitude: doc.longitude,
-      createdAt: doc.createdAt || doc.$createdAt || '',
-      updatedAt: doc.updatedAt || doc.$updatedAt
-    };
+  return {
+    $id: doc.$id,
+    eventName: doc.eventName || doc.title || '',
+    title: doc.title || doc.eventName || '',
+    activityId: doc.activityId || '',
+    activityName: doc.activityName || '',
+    date: doc.date || '',
+    meetupTime: doc.meetupTime || '',
+    meetupPoint: doc.meetupPoint || '',
+    location: doc.location || '',
+    description: doc.description || '',
+    maxParticipants: doc.maxParticipants || 10,
+    participants: Array.isArray(doc.participants) ? doc.participants : [],
+    organizerId: doc.organizerId || doc.createdBy || '',
+    difficulty: doc.difficulty || '',
+    inclusive: Array.isArray(doc.inclusive) ? doc.inclusive : [],
+    isPublic: doc.isPublic !== false,
+    endDate: doc.endDate,
+    endTime: doc.endTime,
+    latitude: doc.latitude,
+    longitude: doc.longitude,
+    createdAt: doc.createdAt || doc.$createdAt || '',
+    updatedAt: doc.updatedAt || doc.$updatedAt,
+    communityId: doc.communityId || undefined,           // Add this line
+    communityName: doc.communityName || undefined        // Add this line
   };
-
+};
   const mapDocumentToActivity = (doc: any): Activity => {
     return {
       $id: doc.$id,
@@ -344,42 +367,31 @@ export default function EventDetail() {
   };
 
   // Fetch event data
-  const fetchEventData = async () => {
-    if (!eventId || typeof eventId !== 'string') return;
+ const fetchEventData = useCallback(async () => {
+  if (!eventId || typeof eventId !== 'string') return;
+  
+  try {
+    setLoading(true);
+    console.log('📄 Fetching event data for:', eventId);
+    console.log('👤 Current user at fetch time:', user?.$id);
+    console.log('🔄 Auth loading:', authLoading);
     
-    try {
-      setLoading(true);
-      
-      // Fetch event
-      const eventDoc = await databases.getDocument(
-        DATABASE_ID,
-        EVENTS_COLLECTION_ID,
-        eventId
-      );
-      
-      const eventData = mapDocumentToEvent(eventDoc);
+    // ✅ ALWAYS fetch event data first
+    const eventDoc = await databases.getDocument(
+      DATABASE_ID,
+      EVENTS_COLLECTION_ID,
+      eventId
+    );
+    
+    const eventData = mapDocumentToEvent(eventDoc);
+    console.log('📄 Event fetched:', eventData.eventName, 'isPublic:', eventData.isPublic);
+
+    // ✅ For PUBLIC events, proceed immediately
+    if (eventData.isPublic) {
+      console.log('✅ Public event - no access check needed');
       setEvent(eventData);
       
-      // Fetch related activity
-      if (eventData.activityId) {
-        try {
-          const activityDoc = await databases.getDocument(
-            DATABASE_ID,
-            ACTIVITIES_COLLECTION_ID,
-            eventData.activityId
-          );
-          const activityData = mapDocumentToActivity(activityDoc);
-          setActivity(activityData);
-          
-          // Update event with activity name
-          eventData.activityName = activityData.activityname;
-          setEvent(eventData);
-        } catch (activityError) {
-          console.warn('⚠️ Could not fetch activity details');
-        }
-      }
-      
-      // Fetch comments
+      // Fetch comments for public events
       try {
         const commentsResponse = await databases.listDocuments(
           DATABASE_ID,
@@ -398,12 +410,92 @@ export default function EventDetail() {
         setComments([]);
       }
       
-    } catch (error) {
-      console.error('❌ Error fetching event data:', error);
-    } finally {
-      setLoading(false);
+      return;
     }
-  };
+
+    // ✅ For PRIVATE events, wait for auth
+    if (!user) {
+      if (authLoading) {
+        console.log('⏳ Private event - waiting for auth to complete...');
+        setLoading(false); // Stop loading spinner
+        return; // Exit and let useEffect re-run when user loads
+      } else {
+        console.log('❌ Private event - no user after auth complete');
+        router.push('/auth/login');
+        return;
+      }
+    }
+
+    // ✅ User exists - check private event access
+    console.log('🔒 Private event - checking access for user:', user.$id);
+    console.log('👑 Event organizer:', eventData.organizerId);
+    console.log('👥 Event participants:', eventData.participants);
+    
+    const isOrganizer = eventData.organizerId === user.$id;
+    const isParticipant = eventData.participants.includes(user.$id);
+    
+    console.log('✅ Is organizer?', isOrganizer, `(${eventData.organizerId} === ${user.$id})`);
+    console.log('✅ Is participant?', isParticipant);
+    
+    if (!isOrganizer && !isParticipant) {
+      console.log('🔍 Checking for invite...');
+      const userInvite = await EventInviteService.checkUserInvite(eventData.$id, user.$id);
+      console.log('📧 User invite found:', userInvite);
+      
+      if (!userInvite) {
+        console.log('❌ User not authorized for private event');
+        alert('⚠️ This is a private event. You need an invitation to view it.');
+        router.push('/events');
+        return;
+      } else {
+        console.log('✅ User has valid invite');
+      }
+    } else {
+      console.log('✅ User has direct access (organizer or participant)');
+    }
+
+    console.log('✅ User has access to private event - setting event data');
+    setEvent(eventData);
+    
+    // Fetch comments for private events
+    try {
+      const commentsResponse = await databases.listDocuments(
+        DATABASE_ID,
+        COMMENTS_COLLECTION_ID,
+        [
+          Query.equal('itemId', eventId),
+          Query.equal('itemType', 'event'),
+          Query.orderDesc('createdAt')
+        ]
+      );
+      
+      const commentsData = commentsResponse.documents.map(mapDocumentToComment);
+      setComments(commentsData);
+    } catch (commentsError) {
+      console.warn('⚠️ Could not fetch comments');
+      setComments([]);
+    }
+    
+  } catch (error) {
+    console.error('❌ Error fetching event data:', error);
+  } finally {
+    setLoading(false);
+  }
+}, [eventId, user, authLoading]); // ✅ Dependencies include user and authLoading
+
+// ✅ Updated useEffect
+useEffect(() => {
+  console.log('🔄 useEffect check:', { 
+    eventId: !!eventId, 
+    authLoading, 
+    hasUser: !!user,
+    userEmail: user?.email 
+  });
+  
+  if (eventId && typeof eventId === 'string') {
+    fetchEventData();
+  }
+}, [fetchEventData]);
 
   // Handle join/leave event
   // Handle join/leave event
@@ -412,7 +504,6 @@ const handleJoinLeave = async () => {
   
   const isParticipant = event.participants.includes(user.$id);
   
-  // ✅ Check limits BEFORE joining
   if (!isParticipant && !canUseFeature('eventsJoined')) {
     alert(getUpgradeMessage('eventsJoined'));
     return;
@@ -426,6 +517,39 @@ const handleJoinLeave = async () => {
       updatedParticipants = event.participants.filter(id => id !== user.$id);
     } else {
       updatedParticipants = [...event.participants, user.$id];
+      
+      // ✅ NEW: Auto-accept any pending invites when user joins
+      try {
+        const pendingInvites = await databases.listDocuments(
+          DATABASE_ID,
+          EVENT_INVITES_COLLECTION_ID,
+          [
+            Query.equal('eventId', event.$id),
+            Query.equal('invitedUserId', user.$id),
+            Query.equal('status', 'pending')
+          ]
+        );
+
+        // Mark all pending invites as accepted
+        for (const invite of pendingInvites.documents) {
+          await databases.updateDocument(
+            DATABASE_ID,
+            EVENT_INVITES_COLLECTION_ID,
+            invite.$id,
+            { 
+              status: 'accepted',
+              respondedAt: new Date().toISOString()
+            }
+          );
+        }
+
+        if (pendingInvites.documents.length > 0) {
+          console.log(`✅ Auto-accepted ${pendingInvites.documents.length} pending invites`);
+        }
+      } catch (inviteError) {
+        console.warn('⚠️ Could not auto-accept invites:', inviteError);
+        // Don't fail the join if invite update fails
+      }
     }
     
     await databases.updateDocument(
@@ -437,14 +561,12 @@ const handleJoinLeave = async () => {
       }
     );
     
-    // ✅ Track usage AFTER successful database update
     if (isParticipant) {
-      await trackFeatureUsage('eventsJoined', -1); // Decrease counter when leaving
+      await trackFeatureUsage('eventsJoined', -1);
     } else {
-      await trackFeatureUsage('eventsJoined', 1); // Increase counter when joining
+      await trackFeatureUsage('eventsJoined', 1);
     }
     
-    // Update local state
     setEvent(prev => prev ? {
       ...prev,
       participants: updatedParticipants
@@ -457,6 +579,253 @@ const handleJoinLeave = async () => {
   } finally {
     setActionLoading(false);
   }
+};
+// In pages/events/[id].tsx, add this logic:
+const handleBackNavigation = () => {
+  // Check if event has communityId and user came from community
+  if (event?.communityId && router.query.from === 'community') {
+    router.push(`/communities/${event.communityId}?tab=events`);
+  } else {
+    router.push('/events');
+  }
+};
+
+// Handle remove participant (organizer only)
+// Handle remove participant (organizer only) - Enhanced for invited users
+const handleRemoveParticipant = async (participantId: string) => {
+  if (!user || !event || event.organizerId !== user.$id || participantId === event.organizerId) {
+    return; // Only organizer can remove, and can't remove themselves
+  }
+
+  const profile = participantProfiles[participantId];
+  const participantName = getDisplayName(profile, 'this participant');
+  
+  const confirmed = confirm(`Are you sure you want to remove ${participantName} from this event? This will revoke their access.`);
+  if (!confirmed) return;
+
+  setActionLoading(true);
+  try {
+    // 1. Remove from participants array
+    const updatedParticipants = event.participants.filter(id => id !== participantId);
+    
+    await databases.updateDocument(
+      DATABASE_ID,
+      EVENTS_COLLECTION_ID,
+      event.$id,
+      {
+        participants: updatedParticipants
+      }
+    );
+    
+    // 2. ✅ NEW: Also revoke any existing invites for this user
+    try {
+      const userInvites = await databases.listDocuments(
+        DATABASE_ID,
+        EVENT_INVITES_COLLECTION_ID,
+        [
+          Query.equal('eventId', event.$id),
+          Query.equal('invitedUserId', participantId),
+          Query.equal('status', 'accepted')
+        ]
+      );
+
+      // Revoke all accepted invites for this user
+      for (const invite of userInvites.documents) {
+        await databases.updateDocument(
+          DATABASE_ID,
+          EVENT_INVITES_COLLECTION_ID,
+          invite.$id,
+          { status: 'expired' } // Mark as expired to revoke access
+        );
+      }
+
+      if (userInvites.documents.length > 0) {
+        console.log(`✅ Revoked ${userInvites.documents.length} accepted invites for user`);
+      }
+    } catch (inviteError) {
+      console.warn('⚠️ Could not revoke invites:', inviteError);
+      // Don't fail the whole operation if invite revocation fails
+    }
+    
+    // 3. Update local state
+    setEvent(prev => prev ? {
+      ...prev,
+      participants: updatedParticipants
+    } : null);
+    
+    console.log(`✅ Removed participant ${participantName} and revoked access`);
+    
+  } catch (error) {
+    console.error('❌ Error removing participant:', error);
+    alert('Failed to remove participant. Please try again.');
+  } finally {
+    setActionLoading(false);
+  }
+};
+// Component to show if a user was invited
+const InvitedUserIndicator: React.FC<{ userId: string; eventId: string }> = ({ userId, eventId }) => {
+  const [wasInvited, setWasInvited] = useState(false);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const checkIfInvited = async () => {
+      try {
+        const invites = await databases.listDocuments(
+          DATABASE_ID,
+          EVENT_INVITES_COLLECTION_ID,
+          [
+            Query.equal('eventId', eventId),
+            Query.equal('invitedUserId', userId),
+            Query.limit(1)
+          ]
+        );
+        
+        setWasInvited(invites.documents.length > 0);
+      } catch (error) {
+        console.error('Error checking invite status:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    checkIfInvited();
+  }, [userId, eventId]);
+
+  if (loading) return null;
+
+  return wasInvited ? (
+    <div className="text-xs text-blue-600 dark:text-blue-400">
+      📧 Invited User
+    </div>
+  ) : null;
+};
+
+// Handle invite user (basic version for testing)
+// Handle invite user (now creates actual database records)
+// Handle invite user (DEBUG VERSION with detailed logging)
+// Handle invite user (now also adds to participants)
+const handleInviteUser = async (email: string) => {
+  if (!event || !user) return;
+  
+  setActionLoading(true);
+  try {
+    console.log('🎯 Creating invite for:', email);
+    
+    // 1. Look up the user
+    const foundUser = await EventInviteService.findUserByEmail(email);
+    
+    if (!foundUser) {
+      alert('❌ No user found with that email address. They need to create an account first.');
+      return;
+    }
+    
+    // 2. Check if user is already a participant
+    if (event.participants.includes(foundUser.userId)) {
+      alert('⚠️ This user is already a participant in this event.');
+      return;
+    }
+    
+    // 3. Check if invite already exists
+    const existingInvite = await EventInviteService.findExistingInvite(event.$id, email);
+    if (existingInvite) {
+      alert('⚠️ This user has already been invited to this event.');
+      return;
+    }
+    
+    // 4. Create the invite record
+    const inviteData = {
+      eventId: event.$id,
+      invitedEmail: email.toLowerCase().trim(),
+      invitedUserId: foundUser.userId,
+      invitedBy: user.$id,
+      inviteToken: EventInviteService.generateInviteToken(),
+      status: 'pending',
+      expiresAt: EventInviteService.getExpirationDate()
+    };
+    
+    const invite = await databases.createDocument(
+      DATABASE_ID,
+      EVENT_INVITES_COLLECTION_ID,
+      'unique()',
+      inviteData
+    );
+    
+    // 5. ✅ NEW: Auto-add invited user to event participants
+   // 5. ✅ AUTO-ADD: Add invited user to event participants  
+console.log('👥 Before adding participant:');
+console.log('👥 Current participants:', event.participants);
+console.log('👥 Adding user:', foundUser.userId);
+
+const updatedParticipants = [...event.participants, foundUser.userId];
+console.log('👥 Updated participants array:', updatedParticipants);
+
+await databases.updateDocument(
+  DATABASE_ID,
+  EVENTS_COLLECTION_ID,
+  event.$id,
+  {
+    participants: updatedParticipants
+  }
+);
+
+console.log('👥 Successfully updated event participants in database');
+
+// 6. Update local state
+setEvent(prev => prev ? {
+  ...prev,
+  participants: updatedParticipants
+} : null);
+
+console.log('👥 Updated local state');
+    
+    // 6. Update local state
+    setEvent(prev => prev ? {
+      ...prev,
+      participants: updatedParticipants
+    } : null);
+    
+    console.log('✅ Invite created and user added to participants:', invite.$id);
+    alert(`✅ Successfully invited ${foundUser.name}! They now have access to this private event.`);
+    
+  } catch (error) {
+    console.error('❌ Error creating invite:', error);
+    alert('Failed to invite user. Please try again.');
+  } finally {
+    setActionLoading(false);
+  }
+};
+
+const CommunityBadge = ({ communityId, communityName }: { communityId: string, communityName: string }) => {
+  const router = useRouter();
+  
+  const handleCommunityClick = async () => {
+    try {
+      const community = await CommunityService.getCommunityById(communityId);
+      if (!community) return;
+      
+      if (community.type === 'private') {
+        // Check if user is member
+        const membership = await CommunityService.getUserMembership(communityId, user?.$id || '');
+        if (!membership) {
+          alert('This is a private community. You must be a member to view it.');
+          return;
+        }
+      }
+      
+      router.push(`/communities/${communityId}`);
+    } catch (error) {
+      alert('Unable to access this community');
+    }
+  };
+
+  return (
+    <div 
+      onClick={handleCommunityClick}
+      className="inline-flex items-center bg-blue-100 text-blue-800 px-3 py-1 rounded-full text-sm cursor-pointer hover:bg-blue-200"
+    >
+      🏘️ Organized by {communityName}
+    </div>
+  );
 };
 
   // Handle delete event
@@ -512,9 +881,12 @@ const handleJoinLeave = async () => {
     }
   };
 
-  useEffect(() => {
+useEffect(() => {
+  if (eventId && typeof eventId === 'string') {
     fetchEventData();
-  }, [eventId]);
+  }
+}, [eventId]); // Remove 'loading' dependency
+
 
   if (loading) {
     return (
@@ -557,14 +929,73 @@ const handleJoinLeave = async () => {
     <MainLayout>
       <div className="max-w-4xl mx-auto p-6 space-y-6">
         {/* Back Navigation */}
-        <button
-          onClick={() => router.back()}
-          className="flex items-center space-x-2 text-emerald-600 dark:text-emerald-400 hover:underline"
-        >
-          <ArrowLeftIcon className="h-4 w-4" />
-          <span>Back to Events</span>
-        </button>
+       <button
+  onClick={() => {
+  if (event?.communityId && router.query.from === 'community') {
+    router.push(`/communities/${event.communityId}?tab=events`);
+  } else {
+    router.push('/events'); // ✅ Always go to events - simple and predictable
+  }
+}}
+  className="flex items-center space-x-2 text-emerald-600 dark:text-emerald-400 hover:underline"
+>
+  <ArrowLeftIcon className="h-4 w-4" />
+  <span>
+    {event?.communityId && router.query.from === 'community' 
+      ? 'Back to Community Events' 
+      : 'Back to Events'
+    }
+  </span>
+</button>
 
+         {/* ✅ NEW: Private Event Banner */}
+       {event && !event.isPublic && (
+         <div className="bg-gradient-to-r from-green-600 to-blue-600 rounded-lg shadow-sm border border-purple-200 dark:border-purple-700 p-4">
+           <div className="flex items-center justify-between">
+             <div className="flex items-center space-x-3">
+               <div className="flex items-center justify-center w-10 h-10 bg-white bg-opacity-20 rounded-full">
+                 <span className="text-2xl">🔒</span>
+               </div>
+               <div>
+                 <h3 className="text-white font-semibold text-lg">
+                   Private Event
+                 </h3>
+                 <p className="text-purple-100 text-sm">
+                   {isOrganizer 
+                     ? "Only you and invited participants can see this event"
+                     : isParticipant 
+                       ? "You have access to this private event"
+                       : "You were invited to this private event"
+                   }
+                 </p>
+               </div>
+             </div>
+             <div className="flex items-center space-x-4 text-white">
+               <div className="text-right">
+                 <div className="text-sm opacity-90">
+                   👥 {event.participants.length} participant{event.participants.length !== 1 ? 's' : ''}
+                 </div>
+                 {isOrganizer && (
+                   <div className="text-xs opacity-75 mt-1">
+                     You're the organizer
+                   </div>
+                 )}
+               </div>
+               
+               {isOrganizer && (
+                 <button
+                   onClick={() => setShowInviteModal(true)}
+                   className="bg-white bg-opacity-20 hover:bg-opacity-30 text-white px-3 py-2 rounded-lg transition-colors text-sm font-medium"
+                 >
+                   ✉️ Invite More
+                 </button>
+               )}
+             </div>
+           </div>
+         </div>
+       )}
+
+             
         {/* Event Header */}
         <div className="bg-white dark:bg-slate-800 rounded-lg shadow-sm border border-gray-200 dark:border-slate-600 p-6">
           <div className="flex items-start justify-between mb-4">
@@ -596,27 +1027,47 @@ const handleJoinLeave = async () => {
               )}
             </div>
 
-            {/* Action Buttons for Organizer */}
-            {isOrganizer && (
-              <div className="flex space-x-2">
-                <button
-                  onClick={() => router.push(`/events/${event.$id}/edit`)}
-                  className="flex items-center space-x-1 px-3 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors"
-                >
-                  <EditIcon className="h-4 w-4" />
-                  <span>Edit</span>
-                </button>
-                <button
-                  onClick={handleDeleteEvent}
-                  className="flex items-center space-x-1 px-3 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
-                >
-                  <TrashIcon className="h-4 w-4" />
-                  <span>Delete</span>
-                </button>
-              </div>
-            )}
+            
           </div>
         </div>
+
+                <div>
+{/* Action Buttons for Organizer */}
+{isOrganizer && (
+  <div className="flex space-x-2">
+    <button
+      onClick={() => router.push(`/events/${event.$id}/edit`)}
+      className="flex items-center space-x-1 px-3 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors"
+    >
+      <EditIcon className="h-4 w-4" />
+      <span>Edit</span>
+    </button>
+    
+   {/* ✅ UPDATED: Use modal instead of prompt */}
+{!event.isPublic && (
+  <button
+    onClick={() => setShowInviteModal(true)}
+    className="flex items-center space-x-1 px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+  >
+    <span>✉️</span>
+    <span>Invite People</span>
+  </button>
+)}
+    
+    <button
+      onClick={handleDeleteEvent}
+      className="flex items-center space-x-1 px-3 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
+    >
+      <TrashIcon className="h-4 w-4" />
+      <span>Delete</span>
+    </button>
+  </div>
+)}
+
+
+                </div>
+
+
 
         {/* Tab Navigation */}
         <div className="bg-white dark:bg-slate-800 rounded-lg shadow-sm border border-gray-200 dark:border-slate-600">
@@ -816,6 +1267,16 @@ const handleJoinLeave = async () => {
                     {isOrganizer ? 'You' : 'Event Organizer'}
                   </p>
                 </div>
+
+                       {/* Community Badge with type assertion */}
+{(event as any).communityId && (
+  <CommunityBadge 
+    communityId={(event as any).communityId} 
+    communityName={(event as any).communityName || 'Community'}
+  />
+)}
+
+
               </div>
             )}
 
@@ -853,6 +1314,10 @@ const handleJoinLeave = async () => {
     </div>
   )}
 </div>
+
+     
+     
+
         {/* Participants List */}
         <div className="bg-white dark:bg-slate-800 rounded-lg shadow-sm border border-gray-200 dark:border-slate-700 p-6">
           <h3 className="flex items-center space-x-2 text-lg font-semibold text-gray-900 dark:text-white mb-4">
@@ -868,30 +1333,49 @@ const handleJoinLeave = async () => {
             </div>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
-              {event.participants.map((participantId, index) => (
-                <div key={participantId} className="flex items-center space-x-3 p-3 bg-gray-50 dark:bg-slate-700 rounded-lg">
-                  <div className="w-10 h-10 bg-emerald-100 dark:bg-emerald-900 rounded-full flex items-center justify-center">
-                    <span className="text-emerald-600 dark:text-emerald-400 font-medium">
-                      {participantId === event.organizerId ? '👑' : `${index + 1}`}
-                    </span>
-                  </div>
-                  <div className="flex-1">
-                    <div className="font-medium text-gray-900 dark:text-white">
-                      {participantId === user?.$id 
-                        ? 'You' 
-                        : participantId === event.organizerId 
-                          ? 'Event Organizer' 
-                          : `Participant ${index + 1}`
-                      }
-                    </div>
-                    {participantId === event.organizerId && (
-                      <div className="text-xs text-emerald-600 dark:text-emerald-400">
-                        ⭐ Event Organizer
-                      </div>
-                    )}
-                  </div>
-                </div>
-              ))}
+              {event.participants.map((participantId, index) => {
+  const profile = participantProfiles[participantId];
+  const displayName = participantId === user?.$id 
+    ? 'You' 
+    : getDisplayName(profile, `Participant ${index + 1}`);
+  const isOrganizer = participantId === event.organizerId;
+  const canRemove = user && event.organizerId === user.$id && participantId !== event.organizerId;
+  
+  return (
+    <div key={participantId} className="flex items-center space-x-3 p-3 bg-gray-50 dark:bg-slate-700 rounded-lg">
+      <div className="w-10 h-10 bg-emerald-100 dark:bg-emerald-900 rounded-full flex items-center justify-center">
+        <span className="text-emerald-600 dark:text-emerald-400 font-medium">
+          {isOrganizer ? '👑' : `${index + 1}`}
+        </span>
+      </div>
+      <div className="flex-1">
+        <div className="font-medium text-gray-900 dark:text-white">
+          {displayName}
+        </div>
+        {isOrganizer ? (
+          <div className="text-xs text-emerald-600 dark:text-emerald-400">
+            ⭐ Event Organizer
+          </div>
+        ) : (
+          // ✅ ADD: Show if user was invited
+          <InvitedUserIndicator userId={participantId} eventId={event.$id} />
+        )}
+      </div>
+      
+      {/* Remove button */}
+      {canRemove && (
+        <button
+          onClick={() => handleRemoveParticipant(participantId)}
+          disabled={actionLoading}
+          className="px-2 py-1 bg-red-100 hover:bg-red-200 text-red-700 rounded text-xs font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          title={`Remove ${displayName} from event and revoke access`}
+        >
+          Remove
+        </button>
+      )}
+    </div>
+  );
+})}
             </div>
           )}
         </div>
@@ -946,7 +1430,23 @@ const handleJoinLeave = async () => {
             </p>
           </div>
         )}
+
+            
       </div>
+
+      {/* ✅ ADD THE MODAL HERE */}
+      {event && (
+        <InviteUsersModal
+          isOpen={showInviteModal}
+          onClose={() => setShowInviteModal(false)}
+          event={event}
+          user={user}
+          onInviteSuccess={() => {
+            // Refresh the event data to show new participants
+            fetchEventData();
+          }}
+        />
+      )}
     </MainLayout>
   );
 }
